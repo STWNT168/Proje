@@ -1,5 +1,43 @@
-function initSpm(){let d=document.getElementById("spm-date");d.value=today();d.max=today();document.querySelectorAll("#spm-form input").forEach(x=>x.oninput=calc);d.onchange=opening;document.getElementById("spm-form").onsubmit=submitSpm;opening();calc()}
-const N=id=>Math.max(0,Number(document.getElementById(id).value||0));
-async function opening(){try{let x=await apiGet("getPmvOpeningBalance",{date:document.getElementById("spm-date").value});document.getElementById("openK").textContent=x.openingKits||0;document.getElementById("openA").textContent=x.openingArticles||0}catch(e){document.getElementById("openK").textContent=0;document.getElementById("openA").textContent=0}calc()}
-function calc(){let ok=+openK.textContent||0,oa=+openA.textContent||0,k=ok+N("newKits")-N("redirectedKits")-N("rtsKits")-N("deliveredKits"),a=oa+N("newArticles")-N("redirectedArticles")-N("rtsArticles")-N("deliveredArticles"),pk=N("invalidKits")+N("tornKits")+N("deliverableKits")+N("incompleteKits"),pa=N("invalidArticles")+N("tornArticles")+N("deliverableArticles")+N("incompleteArticles");document.getElementById("closeK").textContent=k;document.getElementById("closeA").textContent=a;let z=[];if(k<0)z.push("Kit movement exceeds available stock.");if(a<0)z.push("Article movement exceeds available stock.");if(k!=pk)z.push("Kit validation mismatch.");if(a!=pa)z.push("Article validation mismatch.");document.getElementById("validation").textContent=z.length?z.join(" "):"Validation passed.";document.getElementById("validation").className=z.length?"error":"ok"}
-async function submitSpm(e){e.preventDefault();calc();if(document.getElementById("validation").className==="error")return;let r={date:document.getElementById("spm-date").value,newKits:N("newKits"),newArticles:N("newArticles"),redirectedKits:N("redirectedKits"),redirectedArticles:N("redirectedArticles"),rtsKits:N("rtsKits"),rtsArticles:N("rtsArticles"),deliveredKits:N("deliveredKits"),deliveredArticles:N("deliveredArticles"),invalidMobileKits:N("invalidKits"),invalidMobileArticles:N("invalidArticles"),tornKits:N("tornKits"),tornArticles:N("tornArticles"),deliverableKits:N("deliverableKits"),deliverableArticles:N("deliverableArticles"),incompleteKits:N("incompleteKits"),incompleteArticles:N("incompleteArticles")};try{await apiPost("submitPmvReport",{record:r});msg("Report submitted successfully.","ok")}catch(x){msg(x.message,"error")}}
+let spmLoadedDate="";
+async function loadSpmDate(){
+  const date=document.getElementById("spm-date").value||today();
+  document.getElementById("spm-date").value=date;
+  try{
+    const d=await apiGet("getPmvOpeningBalance",{date});
+    document.getElementById("openK").textContent=Number(d.openingKits||0);
+    document.getElementById("openA").textContent=Number(d.openingArticles||0);
+    spmLoadedDate=date;
+    updateClosing();validateForm(false);
+    const own=await apiGet("getOwnPmvDashboard",{date});
+    if(own)fillOwn(own);
+  }catch(e){
+    showLoginLikeMessage("loginMsg",e.message,"error");
+  }
+}
+function fillOwn(r){
+  const map={newKits:"newKits",newArticles:"newArticles",redirectedKits:"redirectedKits",redirectedArticles:"redirectedArticles",rtsKits:"rtsKits",rtsArticles:"rtsArticles",deliveredKits:"deliveredKits",deliveredArticles:"deliveredArticles",invalidMobileKits:"invalidKits",invalidMobileArticles:"invalidArticles",tornKits:"tornKits",tornArticles:"tornArticles",deliverableKits:"deliverableKits",deliverableArticles:"deliverableArticles",incompleteKits:"incompleteKits",incompleteArticles:"incompleteArticles"};
+  Object.keys(map).forEach(k=>{const el=document.getElementById(map[k]);if(el)el.value=Number(r[k]||0)});
+  updateClosing();validateForm(false);
+}
+function initSpm(){
+  const d=document.getElementById("spm-date");d.value=today();
+  d.addEventListener("change",loadSpmDate);
+  document.querySelectorAll("#spm-form input").forEach(x=>x.addEventListener("input",()=>validateForm()));
+  document.getElementById("spm-form").addEventListener("submit",submitSpm);
+  loadSpmDate();
+}
+async function submitSpm(ev){
+  ev.preventDefault();
+  if(!validateForm())return;
+  const date=document.getElementById("spm-date").value;
+  const record={date};
+  const map={newKits:"newKits",newArticles:"newArticles",redirectedKits:"redirectedKits",redirectedArticles:"redirectedArticles",rtsKits:"rtsKits",rtsArticles:"rtsArticles",deliveredKits:"deliveredKits",deliveredArticles:"deliveredArticles",invalidMobileKits:"invalidKits",invalidMobileArticles:"invalidArticles",tornKits:"tornKits",tornArticles:"tornArticles",deliverableKits:"deliverableKits",deliverableArticles:"deliverableArticles",incompleteKits:"incompleteKits",incompleteArticles:"incompleteArticles"};
+  Object.keys(map).forEach(k=>record[k]=n(map[k]));
+  const btn=document.getElementById("submitReport");btn.disabled=true;btn.textContent="Saving...";
+  try{
+    const r=await apiPost("submitPmvReport",{record});
+    const el=document.getElementById("validation");el.className="validation-card ok";el.innerHTML="<b>Saved successfully.</b><br>"+(r.message||"Daily report saved.");
+    await loadSpmDate();
+  }catch(e){const el=document.getElementById("validation");el.className="validation-card bad";el.innerHTML="<b>Submission failed.</b><br>"+e.message}
+  finally{btn.disabled=false;btn.textContent="SUBMIT DAILY REPORT"}
+}

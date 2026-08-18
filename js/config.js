@@ -1,1 +1,6 @@
-const APP_CONFIG={API_URL:"https://script.google.com/macros/s/AKfycbz99tuShcZP2e4cPYKObZU0SGbckHL6uw68wRfZCwmRO9xAQuPNpinC0LisHvEDWxxC/exec",SPREADSHEET_ID:"1vEjY1z-147b38XTWV7vRm_9pjXVMfJmjdQtrKRkkLy8",APP_NAME:"PMV Toolkit Tracker",DIVISION:"Department of Posts · Udhampur Division"};
+const APP_CONFIG={
+  API_URL:"https://script.google.com/macros/s/AKfycbz99tuShcZP2e4cPYKObZU0SGbckHL6uw68wRfZCwmRO9xAQuPNpinC0LisHvEDWxxC/exec",
+  SPREADSHEET_ID:"1vEjY1z-147b38XTWV7vRm_9pjXVMfJmjdQtrKRkkLy8",
+  APP_NAME:"PMV Toolkit Tracker",
+  DIVISION:"Department of Posts · Udhampur Division"
+};

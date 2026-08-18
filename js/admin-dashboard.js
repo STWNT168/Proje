@@ -1,7 +1,35 @@
-function initAdmin(){let d=document.getElementById("admin-date");d.value=today();d.max=today();d.onchange=loadAdmin;document.getElementById("refresh").onclick=loadAdmin;loadAdmin()}
-async function loadAdmin(){let d=document.getElementById("admin-date").value||today();document.getElementById("monitoring").textContent=d;try{let x=await apiGet("getAdminPmvDashboard",{date:d});renderStats(x.summary||{});renderOffice(x.officeWise||[]);renderPending(x.pendingSpms||[]);msg("Consolidated report loaded for "+d,"ok")}catch(e){msg(e.message,"error")}}
-function renderStats(s){let a=[["New Kits",s.newKits],["New Articles",s.newArticles],["Redirected Kits",s.redirectedKits],["Redirected Articles",s.redirectedArticles],["RTS Kits",s.rtsKits],["RTS Articles",s.rtsArticles],["Delivered Kits Today",s.deliveredKitsToday],["Delivered Articles Today",s.deliveredArticlesToday],["Closing Pending Kits",s.closingPendingKits],["Closing Pending Articles",s.closingPendingArticles],["Invalid Mobile Kits",s.invalidMobileKits],["Incomplete Kits",s.incompleteKits]];document.getElementById("stats").innerHTML=a.map(x=>`<div class="stat"><small>${x[0]}</small><b>${x[1]||0}</b></div>`).join("")}
-function renderOffice(a){let h=["Office","Status","Opening Kits","New Kits","Redirected Kits","RTS Kits","Delivered Kits","Pending Kits","Opening Articles","New Articles","Redirected Articles","RTS Articles","Delivered Articles","Pending Articles"];document.getElementById("office").innerHTML="<thead><tr>"+h.map(x=>"<th>"+x+"</th>").join("")+"</tr></thead><tbody>"+a.map(r=>"<tr><td>"+e(r.officeName)+"</td><td>"+e(r.status||"")+"</td><td>"+(r.openingKits||0)+"</td><td>"+(r.newKits||0)+"</td><td>"+(r.redirectedKits||0)+"</td><td>"+(r.rtsKits||0)+"</td><td>"+(r.deliveredKits||0)+"</td><td>"+(r.closingPendingKits||0)+"</td><td>"+(r.openingArticles||0)+"</td><td>"+(r.newArticles||0)+"</td><td>"+(r.redirectedArticles||0)+"</td><td>"+(r.rtsArticles||0)+"</td><td>"+(r.deliveredArticles||0)+"</td><td>"+(r.closingPendingArticles||0)+"</td></tr>").join("")+"</tbody>"}
-function renderPending(a){document.getElementById("pending").innerHTML="<thead><tr><th>#</th><th>SPM Name</th><th>SPM ID</th><th>Office</th></tr></thead><tbody>"+a.map((r,i)=>`<tr><td>${i+1}</td><td>${e(r.spmName)}</td><td>${e(r.spmId)}</td><td>${e(r.officeName)}</td></tr>`).join("")+"</tbody>"}
-function e(x){return String(x??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]) )}
-function msg(x,c){let m=document.getElementById("msg");m.textContent=x;m.className=c}
+async function initAdmin(){
+  const d=document.getElementById("admin-date");d.value=today();
+  d.addEventListener("change",loadAdmin);
+  document.getElementById("refresh").addEventListener("click",loadAdmin);
+  await loadAdmin();
+}
+function stat(label,value){return `<div class="stat"><span>${escapeHtml(label)}</span><b>${Number(value||0).toLocaleString("en-IN")}</b></div>`}
+async function loadAdmin(){
+  const date=document.getElementById("admin-date").value||today();
+  document.getElementById("monitoring").textContent=date;
+  const status=document.getElementById("adminStatus");status.className="notice";status.textContent="Loading consolidated report...";
+  try{
+    const d=await apiGet("getAdminPmvDashboard",{date});
+    const s=d.summary||{};
+    document.getElementById("stats").innerHTML=[
+      stat("New Kits",s.newKits),stat("New Articles",s.newArticles),
+      stat("Redirected Kits",s.redirectedKits),stat("Redirected Articles",s.redirectedArticles),
+      stat("RTS Kits",s.rtsKits),stat("RTS Articles",s.rtsArticles),
+      stat("Delivered Kits Today",s.deliveredKitsToday),stat("Delivered Articles Today",s.deliveredArticlesToday),
+      stat("Closing Pending Kits",s.closingPendingKits),stat("Closing Pending Articles",s.closingPendingArticles),
+      stat("Invalid Mobile Kits",s.invalidMobileKits),stat("Incomplete Kits",s.incompleteKits)
+    ].join("");
+    renderOffice(d.officeWise||[]);
+    renderPending(d.pendingSpms||[]);
+    status.className="notice success";status.textContent=`Consolidated report loaded for ${date}.`;
+  }catch(e){status.className="notice error";status.textContent=e.message;document.getElementById("stats").innerHTML="";document.getElementById("office").innerHTML="";document.getElementById("pending").innerHTML=""}
+}
+function renderOffice(rows){
+  const h=["Office","Status","Opening Kits","New Kits","Redirected Kits","RTS Kits","Delivered Kits","Closing Pending Kits","Opening Articles","New Articles","Redirected Articles","RTS Articles","Delivered Articles","Closing Pending Articles"];
+  document.getElementById("office").innerHTML="<thead><tr>"+h.map(x=>`<th>${x}</th>`).join("")+"</tr></thead><tbody>"+rows.map(r=>`<tr><td>${escapeHtml(r.officeName)}</td><td class="${r.status==="Updated"?"status-ok":"status-pending"}">${r.status}</td><td>${numf(r.openingKits)}</td><td>${numf(r.newKits)}</td><td>${numf(r.redirectedKits)}</td><td>${numf(r.rtsKits)}</td><td>${numf(r.deliveredKits)}</td><td>${numf(r.closingPendingKits)}</td><td>${numf(r.openingArticles)}</td><td>${numf(r.newArticles)}</td><td>${numf(r.redirectedArticles)}</td><td>${numf(r.rtsArticles)}</td><td>${numf(r.deliveredArticles)}</td><td>${numf(r.closingPendingArticles)}</td></tr>`).join("")+"</tbody>";
+}
+function renderPending(rows){
+  document.getElementById("pending").innerHTML="<thead><tr><th>#</th><th>SPM Name</th><th>SPM ID</th><th>Office</th></tr></thead><tbody>"+rows.map((r,i)=>`<tr><td>${i+1}</td><td>${escapeHtml(r.spmName)}</td><td>${escapeHtml(r.spmId)}</td><td>${escapeHtml(r.officeName)}</td></tr>`).join("")+"</tbody>";
+}
+function numf(v){return Number(v||0).toLocaleString("en-IN")}
