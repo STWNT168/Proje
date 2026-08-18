@@ -1,48 +1,5 @@
-<!doctype html>
-<html lang="en"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<meta name="theme-color" content="#0a3d62"><meta name="description" content="PMV Toolkit Tracker">
-<title>PMV Toolkit Tracker v6.1</title><link rel="manifest" href="manifest.json"><link rel="stylesheet" href="css/style.css">
-</head><body>
-<div id="toast"></div>
-<section id="login-view" class="view"><div class="login-card"><h1>PMV Toolkit Tracker</h1><p>Department of Posts · Udhampur Division</p>
-<form id="login-form"><label>User ID<input id="login-user-id" required autocomplete="username"></label>
-<label>Registered Mobile Number<input id="login-mobile" type="tel" inputmode="numeric" maxlength="10" pattern="[0-9]{10}" required></label>
-<button class="btn primary" type="submit">SIGN IN</button></form></div></section>
-<section id="app-view" class="view hidden"><header><div><b>✉ PMV Toolkit Tracker</b><span id="user-badge"></span></div>
-<nav><button id="nav-entry" class="nav-btn">Daily Entry</button><button id="nav-dashboard" class="nav-btn">Dashboard</button><button id="logout" class="nav-btn">Logout</button></nav></header>
-<main id="entry-screen" class="screen hidden"><form id="report-form">
-<div class="card"><h2>Daily PMV Toolkit Report</h2><div class="grid2"><label>Date<input id="report-date" type="date" required></label><label>Office<select id="office" required><option value="">Loading…</option></select></label></div>
-<div class="balance-grid"><div><span>Opening Balance — Kits</span><b id="opening-kits">0</b></div><div><span>Opening Balance — Articles</span><b id="opening-articles">0</b></div></div>
-<p class="hint">Opening balance is automatically taken from the previous date's closing pending. For the first date, OFFICE_MASTER initial opening is used.</p></div>
-<div class="card"><h3>Movement Today</h3><div class="grid4">
-<label>New Kits Received / Taken<input id="received-kits" type="number" min="0" step="1" value="0"></label><label>New Articles Received / Taken<input id="received-articles" type="number" min="0" step="1" value="0"></label>
-<label>Redirected Kits<input id="redirected-kits" type="number" min="0" step="1" value="0"></label><label>Redirected Articles<input id="redirected-articles" type="number" min="0" step="1" value="0"></label>
-<label>RTS / Returned Kits<input id="rts-kits" type="number" min="0" step="1" value="0"></label><label>RTS / Returned Articles<input id="rts-articles" type="number" min="0" step="1" value="0"></label>
-<label>Kits Delivered Today<input id="delivered-kits" type="number" min="0" step="1" value="0"></label><label>Articles Delivered Today<input id="delivered-articles" type="number" min="0" step="1" value="0"></label>
-</div></div>
-<div class="card"><h3>Current Pending Status</h3><p class="hint">The five status categories must exactly equal closing pending after received, redirected, RTS/returned and delivered.</p>
-<div class="table-wrap"><table><thead><tr><th>Details of article</th><th>Kits</th><th>Tool-kit Articles</th></tr></thead><tbody>
-<tr class="strong"><td>Closing pending kits at SO</td><td><input id="pending-kits" readonly></td><td><input id="pending-articles" readonly></td></tr>
-<tr><td>Kits bearing invalid mobile number</td><td><input id="invalid-mobile-kits" type="number" min="0" value="0"></td><td><input id="invalid-mobile-articles" type="number" min="0" value="0"></td></tr>
-<tr><td>Torn / damaged kits</td><td><input id="torn-kits" type="number" min="0" value="0"></td><td><input id="torn-articles" type="number" min="0" value="0"></td></tr>
-<tr><td>Kits without proper article details / address</td><td><input id="improper-details-kits" type="number" min="0" value="0"></td><td><input id="improper-details-articles" type="number" min="0" value="0"></td></tr>
-<tr><td>Number of kits Deliverable</td><td><input id="deliverable-kits" type="number" min="0" value="0"></td><td><input id="deliverable-articles" type="number" min="0" value="0"></td></tr>
-<tr><td>Incomplete Kits / Sets</td><td><input id="incomplete-kits" type="number" min="0" value="0"></td><td><input id="incomplete-articles" type="number" min="0" value="0"></td></tr>
-</tbody><tfoot><tr><th>Total Status</th><th id="status-total-kits">0</th><th id="status-total-articles">0</th></tr></tfoot></table></div>
-<div id="validation-box" class="validation"></div></div>
-<div class="card flow-card"><h3>Automatic Balance</h3><div class="flow-grid"><div><span>Closing Pending Kits</span><b id="calc-pending-kits">0</b></div><div><span>Closing Pending Articles</span><b id="calc-pending-articles">0</b></div><div><span>Delivered Kits Today</span><b id="calc-delivered-kits">0</b></div><div><span>Delivered Articles Today</span><b id="calc-delivered-articles">0</b></div></div></div>
-<div class="actions"><button id="submit-report" type="submit" class="btn primary">SUBMIT REPORT</button><button id="reset-report" type="button" class="btn secondary">RESET</button></div>
-</form></main>
-<main id="dashboard-screen" class="screen hidden"><div class="card dash-head"><div><p class="eyebrow">PMV TOOLKIT</p><h2 id="dash-title">My Office Dashboard</h2><p id="dash-user">—</p></div><div><label>Date<input id="dash-date" type="date"></label><button id="dash-refresh" class="btn primary">Refresh</button></div></div><div id="dash-status" class="status"></div><section class="kpis" id="spm-kpis"></section><div class="card table-wrap"><table><thead><tr><th>Details of article</th><th>Kits</th><th>Tool-kit Articles</th></tr></thead><tbody id="spm-dashboard-rows"></tbody></table></div></main>
-<main id="admin-screen" class="screen hidden"><div class="card dash-head"><div><p class="eyebrow">PMV TOOLKIT</p><h2>Admin / DPS Consolidated Dashboard</h2><p>Monitoring date: <b id="admin-date-label">—</b></p></div><div><label>Date<input id="admin-date" type="date"></label><button id="admin-refresh" class="btn primary">Refresh</button></div></div>
-<div id="admin-status" class="status"></div><section class="kpis" id="admin-kpis"></section>
-<div class="card table-wrap"><h3>Office-wise Consolidated Report</h3><table><thead><tr>
-<th>Office</th><th>Status</th><th>Opening Kits</th><th>New Kits</th><th>Redirected Kits</th><th>RTS Kits</th><th>Delivered Kits</th><th>Pending Kits</th>
-<th>Opening Articles</th><th>New Articles</th><th>Redirected Articles</th><th>RTS Articles</th><th>Delivered Articles</th><th>Pending Articles</th>
-<th>Invalid Mobile</th><th>Torn</th><th>Without Address</th><th>Deliverable</th><th>Incomplete</th>
-</tr></thead><tbody id="admin-rows"></tbody></table></div>
-<div class="card table-wrap"><h3>SPMs Who Have Not Updated</h3><table><thead><tr><th>#</th><th>SPM Name</th><th>SPM ID</th><th>Office</th></tr></thead><tbody id="admin-pending-rows"></tbody></table></div></main>
-</section>
-<script src="js/config.js"></script><script src="js/api.js"></script><script src="js/auth.js"></script><script src="js/calculations.js"></script><script src="js/validation.js"></script><script src="js/spm-dashboard.js"></script><script src="js/admin-dashboard.js"></script><script src="js/app.js"></script>
-</body></html>
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PMV Toolkit Tracker</title><link rel="stylesheet" href="styles.css"></head><body><header>✉ PMV Toolkit Tracker <span id="who"></span><button id="logout">Logout</button></header><main>
+<section id="loginView" class="card"><h1>PMV Toolkit Tracker</h1><p>Department of Posts · Udhampur Division</p><label>User ID<input id="uid"></label><label>Registered Mobile Number<input id="mobile"></label><button id="login">SIGN IN</button><p id="msg"></p></section>
+<section id="spmView" class="hidden"><div class="card"><h2>SPM Daily Update</h2><label>Date<input id="spm-date" type="date"></label><p>Opening Kits: <b id="openK">0</b> · Opening Articles: <b id="openA">0</b></p></div><form id="spm-form" class="card"><div class="grid"><label>New Kits Received<input id="newKits" type="number" min="0" value="0"></label><label>New Articles Received<input id="newArticles" type="number" min="0" value="0"></label><label>Redirected Kits<input id="redirectedKits" type="number" min="0" value="0"></label><label>Redirected Articles<input id="redirectedArticles" type="number" min="0" value="0"></label><label>RTS / Returned Kits<input id="rtsKits" type="number" min="0" value="0"></label><label>RTS / Returned Articles<input id="rtsArticles" type="number" min="0" value="0"></label><label>Delivered Kits Today<input id="deliveredKits" type="number" min="0" value="0"></label><label>Delivered Articles Today<input id="deliveredArticles" type="number" min="0" value="0"></label><label>Invalid Mobile Kits<input id="invalidKits" type="number" min="0" value="0"></label><label>Invalid Mobile Articles<input id="invalidArticles" type="number" min="0" value="0"></label><label>Torn / Without Proper Details Kits<input id="tornKits" type="number" min="0" value="0"></label><label>Torn / Without Proper Details Articles<input id="tornArticles" type="number" min="0" value="0"></label><label>Deliverable Kits<input id="deliverableKits" type="number" min="0" value="0"></label><label>Deliverable Articles<input id="deliverableArticles" type="number" min="0" value="0"></label><label>Incomplete Kits<input id="incompleteKits" type="number" min="0" value="0"></label><label>Incomplete Articles<input id="incompleteArticles" type="number" min="0" value="0"></label></div><p>Closing Kits: <b id="closeK">0</b> · Closing Articles: <b id="closeA">0</b></p><p id="validation"></p><button>SUBMIT DAILY REPORT</button></form></section>
+<section id="adminView" class="hidden"><div class="card"><h2>Admin / DPS Consolidated Dashboard</h2><label>Date<input id="admin-date" type="date"></label><button id="refresh">Refresh</button><p>Monitoring date: <b id="monitoring"></b></p><p id="msg"></p></div><div id="stats" class="stats"></div><div class="card"><h3>Office-wise Consolidated Report</h3><div class="scroll"><table id="office"></table></div></div><div class="card"><h3>SPMs Who Have Not Updated</h3><div class="scroll"><table id="pending"></table></div></div></section></main>
+<script src="config.js"></script><script src="api.js"></script><script src="spm-dashboard.js"></script><script src="admin-dashboard.js"></script><script src="app.js"></script></body></html>
