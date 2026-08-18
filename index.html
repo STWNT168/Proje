@@ -5,56 +5,41 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0b466b">
   <title>PMV Toolkit Tracker</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
     <div class="brand-mark">✉</div>
-    <div>
-      <strong>PMV Toolkit Tracker</strong>
-      <small>Department of Posts · Udhampur Division</small>
-    </div>
+    <div><strong>PMV Toolkit Tracker</strong><small>Department of Posts · Udhampur Division</small></div>
   </div>
   <div class="user-area">
     <span id="who"></span>
-    <button id="logout" class="btn btn-light">Logout</button>
+    <button id="logout" class="btn btn-light hidden">Logout</button>
   </div>
 </header>
 
 <main class="container">
-
-  <!-- LOGIN -->
   <section id="loginView" class="login-wrap">
     <div class="login-card">
       <div class="eyebrow">PMV TOOLKIT</div>
       <h1>PMV Toolkit Tracker</h1>
       <p class="muted">Secure daily reporting and consolidated monitoring</p>
-
-      <label>User ID
-        <input id="uid" autocomplete="username" inputmode="numeric" placeholder="Enter User ID">
-      </label>
-
-      <label>Registered Mobile Number
-        <input id="mobile" type="tel" autocomplete="tel" inputmode="numeric" placeholder="Enter registered mobile">
-      </label>
-
+      <label>User ID<input id="uid" autocomplete="username" inputmode="numeric" placeholder="Enter User ID"></label>
+      <label>Registered Mobile Number<input id="mobile" type="tel" autocomplete="tel" inputmode="numeric" placeholder="Enter registered mobile"></label>
       <button id="login" class="btn btn-primary btn-wide">SIGN IN</button>
-      <div id="msg" class="notice"></div>
+      <div id="loginMsg" class="notice"></div>
     </div>
   </section>
 
-  <!-- SPM -->
   <section id="spmView" class="hidden">
     <div class="page-head">
       <div>
         <div class="eyebrow">SPM DAILY UPDATE</div>
         <h1>Daily Toolkit Position</h1>
-        <p class="muted">Enter today's movement and validate the closing balance before submission.</p>
+        <p class="muted">Opening balance is automatically taken from the latest previous report.</p>
       </div>
-      <div class="date-box">
-        <label>Date<input id="spm-date" type="date"></label>
-      </div>
+      <div class="date-box"><label>Date<input id="spm-date" type="date"></label></div>
     </div>
 
     <div class="balance-strip">
@@ -68,47 +53,48 @@
       <div class="section-card">
         <div class="section-title"><span>1</span> Daily Movement</div>
         <div class="grid">
-          <label>New Kits Received<input id="newKits" type="number" min="0" value="0"></label>
-          <label>New Articles Received<input id="newArticles" type="number" min="0" value="0"></label>
-          <label>Redirected Kits<input id="redirectedKits" type="number" min="0" value="0"></label>
-          <label>Redirected Articles<input id="redirectedArticles" type="number" min="0" value="0"></label>
-          <label>RTS / Returned Kits<input id="rtsKits" type="number" min="0" value="0"></label>
-          <label>RTS / Returned Articles<input id="rtsArticles" type="number" min="0" value="0"></label>
+          <label>New Kits Received<input id="newKits" type="number" min="0" step="1" value="0"></label>
+          <label>New Articles Received<input id="newArticles" type="number" min="0" step="1" value="0"></label>
+          <label>Redirected Kits<input id="redirectedKits" type="number" min="0" step="1" value="0"></label>
+          <label>Redirected Articles<input id="redirectedArticles" type="number" min="0" step="1" value="0"></label>
+          <label>RTS / Returned Kits<input id="rtsKits" type="number" min="0" step="1" value="0"></label>
+          <label>RTS / Returned Articles<input id="rtsArticles" type="number" min="0" step="1" value="0"></label>
         </div>
       </div>
 
       <div class="section-card">
-        <div class="section-title"><span>2</span> Delivery</div>
+        <div class="section-title"><span>2</span> Delivery & Exceptions</div>
         <div class="grid">
-          <label>Delivered Kits Today<input id="deliveredKits" type="number" min="0" value="0"></label>
-          <label>Delivered Articles Today<input id="deliveredArticles" type="number" min="0" value="0"></label>
-          <label>Invalid Mobile Kits<input id="invalidKits" type="number" min="0" value="0"></label>
-          <label>Invalid Mobile Articles<input id="invalidArticles" type="number" min="0" value="0"></label>
-          <label>Torn / Without Proper Details Kits<input id="tornKits" type="number" min="0" value="0"></label>
-          <label>Torn / Without Proper Details Articles<input id="tornArticles" type="number" min="0" value="0"></label>
+          <label>Delivered Kits Today<input id="deliveredKits" type="number" min="0" step="1" value="0"></label>
+          <label>Delivered Articles Today<input id="deliveredArticles" type="number" min="0" step="1" value="0"></label>
+          <label>Invalid Mobile Kits<input id="invalidKits" type="number" min="0" step="1" value="0"></label>
+          <label>Invalid Mobile Articles<input id="invalidArticles" type="number" min="0" step="1" value="0"></label>
+          <label>Torn / Without Proper Details Kits<input id="tornKits" type="number" min="0" step="1" value="0"></label>
+          <label>Torn / Without Proper Details Articles<input id="tornArticles" type="number" min="0" step="1" value="0"></label>
         </div>
       </div>
 
       <div class="section-card">
         <div class="section-title"><span>3</span> Deliverability / Incomplete</div>
         <div class="grid">
-          <label>Deliverable Kits<input id="deliverableKits" type="number" min="0" value="0"></label>
-          <label>Deliverable Articles<input id="deliverableArticles" type="number" min="0" value="0"></label>
-          <label>Incomplete Kits<input id="incompleteKits" type="number" min="0" value="0"></label>
-          <label>Incomplete Articles<input id="incompleteArticles" type="number" min="0" value="0"></label>
+          <label>Deliverable Kits<input id="deliverableKits" type="number" min="0" step="1" value="0"></label>
+          <label>Deliverable Articles<input id="deliverableArticles" type="number" min="0" step="1" value="0"></label>
+          <label>Incomplete Kits<input id="incompleteKits" type="number" min="0" step="1" value="0"></label>
+          <label>Incomplete Articles<input id="incompleteArticles" type="number" min="0" step="1" value="0"></label>
         </div>
       </div>
 
-      <div class="validation-card">
-        <strong>Validation</strong>
-        <p id="validation">Validation pending.</p>
+      <div class="formula-card">
+        <b>Validation formula</b>
+        <div>Kits: Opening + New − Redirected − RTS − Delivered = Invalid Mobile + Torn/Without Address + Deliverable + Incomplete</div>
+        <div>Articles: Opening + New − Redirected − RTS − Delivered = Invalid Mobile + Torn/Without Address + Deliverable + Incomplete</div>
       </div>
 
-      <button class="btn btn-primary btn-submit">SUBMIT DAILY REPORT</button>
+      <div id="validation" class="validation-card info">Enter movement values to validate.</div>
+      <button id="submitReport" class="btn btn-primary btn-submit" type="submit">SUBMIT DAILY REPORT</button>
     </form>
   </section>
 
-  <!-- ADMIN -->
   <section id="adminView" class="hidden">
     <div class="dashboard-head">
       <div>
@@ -123,73 +109,27 @@
     </div>
 
     <div id="adminStatus" class="notice"></div>
+    <div id="stats" class="stats"></div>
 
     <div class="dashboard-section">
-      <div class="section-heading">
-        <div>
-          <h2>Daily Summary</h2>
-          <p>Office-wise movement for the selected date</p>
-        </div>
-      </div>
-      <div id="stats" class="stats"></div>
+      <div class="section-heading"><div><h2>Office-wise Consolidated Report</h2><p>Opening balance → today's movement → closing balance</p></div></div>
+      <div class="table-wrap"><table id="office"></table></div>
     </div>
 
     <div class="dashboard-section">
-      <div class="section-heading">
-        <div>
-          <h2>Office-wise Consolidated Report</h2>
-          <p>Opening balance → today's movement → closing balance</p>
-        </div>
-      </div>
-      <div class="table-wrap">
-        <table id="office"></table>
-      </div>
-    </div>
-
-    <div class="dashboard-section">
-      <div class="section-heading">
-        <div>
-          <h2>SPMs Who Have Not Updated</h2>
-          <p>Active SPMs without a report for the selected date</p>
-        </div>
-      </div>
-      <div class="table-wrap">
-        <table id="pending"></table>
-      </div>
+      <div class="section-heading"><div><h2>SPMs Who Have Not Updated</h2><p>Active SPMs without a report for the selected date</p></div></div>
+      <div class="table-wrap"><table id="pending"></table></div>
     </div>
   </section>
-
 </main>
 
 <footer>PMV Toolkit Tracker · Udhampur Division</footer>
-
-<script src="config.js"></script>
-<script src="api.js"></script>
-<script src="spm-dashboard.js"></script>
-<script src="admin-dashboard.js"></script>
-<script src="app.js"></script>
-
-<script>
-  // Admin dashboard uses the same message helper as login.
-  // This keeps the UI compatible with the existing JavaScript files.
-  window.addEventListener("DOMContentLoaded", function () {
-    const oldMsg = window.msg;
-    if (typeof oldMsg === "function") {
-      window.msg = function (text, cls) {
-        const loginMsg = document.getElementById("msg");
-        const adminMsg = document.getElementById("adminStatus");
-        const target = document.getElementById("adminView") &&
-                       !document.getElementById("adminView").classList.contains("hidden")
-                       ? adminMsg : loginMsg;
-        if (target) {
-          target.textContent = text || "";
-          target.className = "notice " + (cls || "");
-        } else {
-          oldMsg(text, cls);
-        }
-      };
-    }
-  });
-</script>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/calculations.js"></script>
+<script src="js/validation.js"></script>
+<script src="js/spm-dashboard.js"></script>
+<script src="js/admin-dashboard.js"></script>
+<script src="js/app.js"></script>
 </body>
 </html>

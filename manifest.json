@@ -1,1 +1,8 @@
-{"name":"PMV Toolkit Tracker v6.1","short_name":"PMV Tracker","start_url":".","display":"standalone","background_color":"#eef3f7","theme_color":"#0a3d62"}
+{
+  "name": "PMV Toolkit Tracker",
+  "short_name": "PMV Tracker",
+  "start_url": "./",
+  "display": "standalone",
+  "theme_color": "#0b466b",
+  "background_color": "#eef4f8"
+}

@@ -1,0 +1,12 @@
+PMV TOOLKIT TRACKER - UPLOAD CHECKLIST
+
+1. Upload ZIP contents to the GitHub repository ROOT.
+2. Ensure index.html is at repository root.
+3. Ensure css/styles.css and js/*.js are present.
+4. In Apps Script replace Code.gs and run setupSpreadsheet() once.
+5. Redeploy Apps Script Web App after changing Code.gs.
+6. Web App: Execute as Me; access: Anyone.
+7. Open GitHub Pages in a private/incognito tab and test login.
+8. If login says "User not found", check USER_MASTER.
+9. If login says "Mobile number does not match", check MOBILE in USER_MASTER.
+10. If API says "Missing sheet", run setupSpreadsheet().
