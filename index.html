@@ -1,5 +1,195 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PMV Toolkit Tracker</title><link rel="stylesheet" href="styles.css"></head><body><header>✉ PMV Toolkit Tracker <span id="who"></span><button id="logout">Logout</button></header><main>
-<section id="loginView" class="card"><h1>PMV Toolkit Tracker</h1><p>Department of Posts · Udhampur Division</p><label>User ID<input id="uid"></label><label>Registered Mobile Number<input id="mobile"></label><button id="login">SIGN IN</button><p id="msg"></p></section>
-<section id="spmView" class="hidden"><div class="card"><h2>SPM Daily Update</h2><label>Date<input id="spm-date" type="date"></label><p>Opening Kits: <b id="openK">0</b> · Opening Articles: <b id="openA">0</b></p></div><form id="spm-form" class="card"><div class="grid"><label>New Kits Received<input id="newKits" type="number" min="0" value="0"></label><label>New Articles Received<input id="newArticles" type="number" min="0" value="0"></label><label>Redirected Kits<input id="redirectedKits" type="number" min="0" value="0"></label><label>Redirected Articles<input id="redirectedArticles" type="number" min="0" value="0"></label><label>RTS / Returned Kits<input id="rtsKits" type="number" min="0" value="0"></label><label>RTS / Returned Articles<input id="rtsArticles" type="number" min="0" value="0"></label><label>Delivered Kits Today<input id="deliveredKits" type="number" min="0" value="0"></label><label>Delivered Articles Today<input id="deliveredArticles" type="number" min="0" value="0"></label><label>Invalid Mobile Kits<input id="invalidKits" type="number" min="0" value="0"></label><label>Invalid Mobile Articles<input id="invalidArticles" type="number" min="0" value="0"></label><label>Torn / Without Proper Details Kits<input id="tornKits" type="number" min="0" value="0"></label><label>Torn / Without Proper Details Articles<input id="tornArticles" type="number" min="0" value="0"></label><label>Deliverable Kits<input id="deliverableKits" type="number" min="0" value="0"></label><label>Deliverable Articles<input id="deliverableArticles" type="number" min="0" value="0"></label><label>Incomplete Kits<input id="incompleteKits" type="number" min="0" value="0"></label><label>Incomplete Articles<input id="incompleteArticles" type="number" min="0" value="0"></label></div><p>Closing Kits: <b id="closeK">0</b> · Closing Articles: <b id="closeA">0</b></p><p id="validation"></p><button>SUBMIT DAILY REPORT</button></form></section>
-<section id="adminView" class="hidden"><div class="card"><h2>Admin / DPS Consolidated Dashboard</h2><label>Date<input id="admin-date" type="date"></label><button id="refresh">Refresh</button><p>Monitoring date: <b id="monitoring"></b></p><p id="msg"></p></div><div id="stats" class="stats"></div><div class="card"><h3>Office-wise Consolidated Report</h3><div class="scroll"><table id="office"></table></div></div><div class="card"><h3>SPMs Who Have Not Updated</h3><div class="scroll"><table id="pending"></table></div></div></section></main>
-<script src="config.js"></script><script src="api.js"></script><script src="spm-dashboard.js"></script><script src="admin-dashboard.js"></script><script src="app.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b466b">
+  <title>PMV Toolkit Tracker</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark">✉</div>
+    <div>
+      <strong>PMV Toolkit Tracker</strong>
+      <small>Department of Posts · Udhampur Division</small>
+    </div>
+  </div>
+  <div class="user-area">
+    <span id="who"></span>
+    <button id="logout" class="btn btn-light">Logout</button>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- LOGIN -->
+  <section id="loginView" class="login-wrap">
+    <div class="login-card">
+      <div class="eyebrow">PMV TOOLKIT</div>
+      <h1>PMV Toolkit Tracker</h1>
+      <p class="muted">Secure daily reporting and consolidated monitoring</p>
+
+      <label>User ID
+        <input id="uid" autocomplete="username" inputmode="numeric" placeholder="Enter User ID">
+      </label>
+
+      <label>Registered Mobile Number
+        <input id="mobile" type="tel" autocomplete="tel" inputmode="numeric" placeholder="Enter registered mobile">
+      </label>
+
+      <button id="login" class="btn btn-primary btn-wide">SIGN IN</button>
+      <div id="msg" class="notice"></div>
+    </div>
+  </section>
+
+  <!-- SPM -->
+  <section id="spmView" class="hidden">
+    <div class="page-head">
+      <div>
+        <div class="eyebrow">SPM DAILY UPDATE</div>
+        <h1>Daily Toolkit Position</h1>
+        <p class="muted">Enter today's movement and validate the closing balance before submission.</p>
+      </div>
+      <div class="date-box">
+        <label>Date<input id="spm-date" type="date"></label>
+      </div>
+    </div>
+
+    <div class="balance-strip">
+      <div><span>Opening Kits</span><b id="openK">0</b></div>
+      <div><span>Opening Articles</span><b id="openA">0</b></div>
+      <div class="balance-close"><span>Closing Kits</span><b id="closeK">0</b></div>
+      <div class="balance-close"><span>Closing Articles</span><b id="closeA">0</b></div>
+    </div>
+
+    <form id="spm-form">
+      <div class="section-card">
+        <div class="section-title"><span>1</span> Daily Movement</div>
+        <div class="grid">
+          <label>New Kits Received<input id="newKits" type="number" min="0" value="0"></label>
+          <label>New Articles Received<input id="newArticles" type="number" min="0" value="0"></label>
+          <label>Redirected Kits<input id="redirectedKits" type="number" min="0" value="0"></label>
+          <label>Redirected Articles<input id="redirectedArticles" type="number" min="0" value="0"></label>
+          <label>RTS / Returned Kits<input id="rtsKits" type="number" min="0" value="0"></label>
+          <label>RTS / Returned Articles<input id="rtsArticles" type="number" min="0" value="0"></label>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <div class="section-title"><span>2</span> Delivery</div>
+        <div class="grid">
+          <label>Delivered Kits Today<input id="deliveredKits" type="number" min="0" value="0"></label>
+          <label>Delivered Articles Today<input id="deliveredArticles" type="number" min="0" value="0"></label>
+          <label>Invalid Mobile Kits<input id="invalidKits" type="number" min="0" value="0"></label>
+          <label>Invalid Mobile Articles<input id="invalidArticles" type="number" min="0" value="0"></label>
+          <label>Torn / Without Proper Details Kits<input id="tornKits" type="number" min="0" value="0"></label>
+          <label>Torn / Without Proper Details Articles<input id="tornArticles" type="number" min="0" value="0"></label>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <div class="section-title"><span>3</span> Deliverability / Incomplete</div>
+        <div class="grid">
+          <label>Deliverable Kits<input id="deliverableKits" type="number" min="0" value="0"></label>
+          <label>Deliverable Articles<input id="deliverableArticles" type="number" min="0" value="0"></label>
+          <label>Incomplete Kits<input id="incompleteKits" type="number" min="0" value="0"></label>
+          <label>Incomplete Articles<input id="incompleteArticles" type="number" min="0" value="0"></label>
+        </div>
+      </div>
+
+      <div class="validation-card">
+        <strong>Validation</strong>
+        <p id="validation">Validation pending.</p>
+      </div>
+
+      <button class="btn btn-primary btn-submit">SUBMIT DAILY REPORT</button>
+    </form>
+  </section>
+
+  <!-- ADMIN -->
+  <section id="adminView" class="hidden">
+    <div class="dashboard-head">
+      <div>
+        <div class="eyebrow">PMV TOOLKIT</div>
+        <h1>Admin / DPS Consolidated Dashboard</h1>
+        <p>Monitoring date: <b id="monitoring"></b></p>
+      </div>
+      <div class="dashboard-actions">
+        <label>Date<input id="admin-date" type="date"></label>
+        <button id="refresh" class="btn btn-primary">↻ Refresh</button>
+      </div>
+    </div>
+
+    <div id="adminStatus" class="notice"></div>
+
+    <div class="dashboard-section">
+      <div class="section-heading">
+        <div>
+          <h2>Daily Summary</h2>
+          <p>Office-wise movement for the selected date</p>
+        </div>
+      </div>
+      <div id="stats" class="stats"></div>
+    </div>
+
+    <div class="dashboard-section">
+      <div class="section-heading">
+        <div>
+          <h2>Office-wise Consolidated Report</h2>
+          <p>Opening balance → today's movement → closing balance</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="office"></table>
+      </div>
+    </div>
+
+    <div class="dashboard-section">
+      <div class="section-heading">
+        <div>
+          <h2>SPMs Who Have Not Updated</h2>
+          <p>Active SPMs without a report for the selected date</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="pending"></table>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>PMV Toolkit Tracker · Udhampur Division</footer>
+
+<script src="config.js"></script>
+<script src="api.js"></script>
+<script src="spm-dashboard.js"></script>
+<script src="admin-dashboard.js"></script>
+<script src="app.js"></script>
+
+<script>
+  // Admin dashboard uses the same message helper as login.
+  // This keeps the UI compatible with the existing JavaScript files.
+  window.addEventListener("DOMContentLoaded", function () {
+    const oldMsg = window.msg;
+    if (typeof oldMsg === "function") {
+      window.msg = function (text, cls) {
+        const loginMsg = document.getElementById("msg");
+        const adminMsg = document.getElementById("adminStatus");
+        const target = document.getElementById("adminView") &&
+                       !document.getElementById("adminView").classList.contains("hidden")
+                       ? adminMsg : loginMsg;
+        if (target) {
+          target.textContent = text || "";
+          target.className = "notice " + (cls || "");
+        } else {
+          oldMsg(text, cls);
+        }
+      };
+    }
+  });
+</script>
+</body>
+</html>
