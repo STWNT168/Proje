@@ -1,20 +1,6 @@
-const Api = (() => {
-  const base = () => window.PMV_CONFIG.API_URL;
-  async function post(action,payload={}) {
-    const res=await fetch(base(),{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action,...payload})});
-    const data=await res.json(); if(!data.success) throw new Error(data.message||"Request failed."); return data;
-  }
-  async function get(action,params={}) {
-    const q=new URLSearchParams({action,...params}); const res=await fetch(base()+"?"+q.toString());
-    const data=await res.json(); if(!data.success) throw new Error(data.message||"Request failed."); return data;
-  }
-  return {
-    login:(userId,mobile)=>post("login",{userId,mobile}),
-    logout:session=>post("logout",{session}),
-    offices:session=>get("getOfficeList",{session:JSON.stringify(session)}),
-    opening:(session,officeId,date)=>get("getOpeningBalance",{session:JSON.stringify(session),officeId,date}),
-    submit:(session,record)=>post("submitPmvReport",{session,record}),
-    ownDashboard:(session,date)=>get("getOwnPmvDashboard",{session:JSON.stringify(session),date}),
-    adminDashboard:(session,date)=>get("getAdminPmvDashboard",{session:JSON.stringify(session),date})
-  };
-})();
+function session(){try{return JSON.parse(localStorage.getItem("pmv_session")||"null")}catch(e){return null}}
+function saveSession(x){localStorage.setItem("pmv_session",JSON.stringify(x))}
+function clearSession(){localStorage.removeItem("pmv_session")}
+function today(){let d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+async function apiGet(action,p={}){let q=new URLSearchParams({action,...p});let s=session();if(s)q.set("session",JSON.stringify(s));let r=await fetch(APP_CONFIG.API_URL+"?"+q,{cache:"no-store"});let x=await r.json();if(!x.success)throw Error(x.message||"Request failed");return x.data}
+async function apiPost(action,p={}){let s=session();let r=await fetch(APP_CONFIG.API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action,...p,session:p.session||s})});let x=await r.json();if(!x.success)throw Error(x.message||"Request failed");return x.data}
