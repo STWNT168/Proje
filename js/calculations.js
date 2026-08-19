@@ -1,11 +1,1 @@
-function n(id){return Math.max(0,Math.floor(Number(document.getElementById(id)?.value||0)))}
-function calcValues(){
-  const openingK=Number(document.getElementById("openK").textContent||0);
-  const openingA=Number(document.getElementById("openA").textContent||0);
-  const closeK=openingK+n("newKits")-n("redirectedKits")-n("rtsKits")-n("deliveredKits");
-  const closeA=openingA+n("newArticles")-n("redirectedArticles")-n("rtsArticles")-n("deliveredArticles");
-  const partsK=n("invalidKits")+n("tornKits")+n("deliverableKits")+n("incompleteKits");
-  const partsA=n("invalidArticles")+n("tornArticles")+n("deliverableArticles")+n("incompleteArticles");
-  return {openingK,openingA,closeK,closeA,partsK,partsA};
-}
-function updateClosing(){const c=calcValues();document.getElementById("closeK").textContent=c.closeK;document.getElementById("closeA").textContent=c.closeA;return c}
+(()=>{const n=id=>Math.max(0,Math.floor(Number(document.getElementById(id)?.value||0)));function calc(){let ok=+document.getElementById('openK').textContent||0,oa=+document.getElementById('openA').textContent||0,ck=ok+n('newKits')-n('redirectedKits')-n('rtsKits')-n('deliveredKits'),ca=oa+n('newArticles')-n('redirectedArticles')-n('rtsArticles')-n('deliveredArticles'),pk=n('invalidKits')+n('tornKits')+n('deliverableKits')+n('incompleteKits'),pa=n('invalidArticles')+n('tornArticles')+n('deliverableArticles')+n('incompleteArticles');return{openingK:ok,openingA:oa,closeK:ck,closeA:ca,partsK:pk,partsA:pa}}function render(){let c=calc();closeK.textContent=c.closeK;closeA.textContent=c.closeA;let v=document.getElementById('validation'),good=c.closeK>=0&&c.closeA>=0&&c.closeK===c.partsK&&c.closeA===c.partsA;v.className='validation '+(good?'ok':'bad');v.innerHTML=good?`<b>✓ Validation passed</b><span>Kits ${c.closeK} = ${c.partsK} classified</span><span>Articles ${c.closeA} = ${c.partsA} classified</span>`:`<b>Validation failed</b><span>Kits movement ${c.closeK} vs categories ${c.partsK}</span><span>Articles movement ${c.closeA} vs categories ${c.partsA}</span>`;return c}window.PMVCalc={n,calc,render}})();
