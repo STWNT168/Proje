@@ -1,2 +1,75 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#084d70"><title>PMV Toolkit Tracker</title><link rel="stylesheet" href="styles.css"></head><body><header><b>✉ PMV Toolkit Tracker</b><small>Department of Posts · Udhampur Division</small><span id="who"></span><button id="logout">Logout</button></header><main><section id="loginView" class="login"><div class="card"><small>PMV TOOLKIT</small><h1>PMV Toolkit Tracker</h1><p>Secure daily reporting and consolidated monitoring</p><label>User ID<input id="uid" placeholder="Enter User ID"></label><label>Registered Mobile Number<input id="mobile" inputmode="numeric" placeholder="Enter registered mobile"></label><button id="login">SIGN IN</button><div id="loginMsg" class="msg"></div></div></section><section id="spmView" class="hidden"><div class="card title"><small>SPM REPORTING</small><h1>Daily Toolkit Position</h1><p>Opening balance is automatically taken from the previous date's closing balance.</p></div><div class="card opening"><label>Date<input id="spm-date" type="date"></label><div>Opening Kits<b id="openK">0</b></div><div>Opening Articles<b id="openA">0</b></div><div>Closing Kits<b id="closeK">0</b></div><div>Closing Articles<b id="closeA">0</b></div></div><form id="spm-form" class="card"><h2>1 · Daily Movement</h2><div class="grid"><label>New Kits Received<input id="newKits" type="number" min="0" value="0"></label><label>New Articles Received<input id="newArticles" type="number" min="0" value="0"></label><label>Redirected Kits<input id="redirectedKits" type="number" min="0" value="0"></label><label>Redirected Articles<input id="redirectedArticles" type="number" min="0" value="0"></label><label>RTS / Returned Kits<input id="rtsKits" type="number" min="0" value="0"></label><label>RTS / Returned Articles<input id="rtsArticles" type="number" min="0" value="0"></label><label>Delivered Kits Today<input id="deliveredKits" type="number" min="0" value="0"></label><label>Delivered Articles Today<input id="deliveredArticles" type="number" min="0" value="0"></label></div><h2>2 · Pending Classification</h2><div class="grid"><label>Invalid Mobile Kits<input id="invalidKits" type="number" min="0" value="0"></label><label>Invalid Mobile Articles<input id="invalidArticles" type="number" min="0" value="0"></label><label>Torn / Without Proper Details Kits<input id="tornKits" type="number" min="0" value="0"></label><label>Torn / Without Proper Details Articles<input id="tornArticles" type="number" min="0" value="0"></label><label>Deliverable Kits<input id="deliverableKits" type="number" min="0" value="0"></label><label>Deliverable Articles<input id="deliverableArticles" type="number" min="0" value="0"></label><label>Incomplete Kits<input id="incompleteKits" type="number" min="0" value="0"></label><label>Incomplete Articles<input id="incompleteArticles" type="number" min="0" value="0"></label></div><div id="validation" class="validation">Validation pending.</div><button type="submit" id="submitSpm">SUBMIT DAILY REPORT</button></form>
-<div class="card dashboard-card"><h2>SPM Dashboard — Kits & Articles</h2><div id="spmDetailTable"></div></div></section><section id="adminView" class="hidden"><div class="card title"><small>PMV TOOLKIT</small><h1>Admin / DPS Consolidated Dashboard</h1><p>Daily movement, deliveries and SPM reporting status.</p></div><div class="card filters"><label>Monitoring Date<input id="admin-date" type="date"></label><button id="refresh">Refresh</button><span id="adminStatus"></span></div><div id="stats" class="stats"></div><div class="card"><h2>SPM-wise Complete Dashboard — Kits & Articles</h2><div class="scroll wide"><table id="spmDetails"></table></div></div><div class="card"><h2>Office-wise Consolidated Report</h2><div class="scroll wide"><table id="office"></table></div></div><div class="card"><h2>SPMs Who Have Not Updated</h2><div class="scroll"><table id="pending"></table></div></div></section></main><div id="toast" class="toast"></div><script src="js/config.js"></script><script src="js/api.js"></script><script src="js/auth.js"></script><script src="js/calculations.js"></script><script src="js/validation.js"></script><script src="js/spm-dashboard.js"></script><script src="js/admin-dashboard.js"></script><script src="js/app.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b466b"><meta name="description" content="PMV Toolkit daily reporting and monitoring">
+<title>PMV Toolkit Tracker</title><link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><div class="brand-mark">✉</div><div><strong>PMV Toolkit Tracker</strong><small>Department of Posts · Udhampur Division</small></div></div>
+  <div class="user-area"><span id="who"></span><button id="logout" class="btn btn-light">Logout</button></div>
+</header>
+<main class="container">
+
+<section id="loginView" class="login-wrap">
+  <div class="login-card">
+    <div class="eyebrow">PMV TOOLKIT</div><h1>Daily Reporting Portal</h1>
+    <p class="muted">Simple, secure and ready for future PWA use.</p>
+    <label>User ID<input id="uid" autocomplete="username" inputmode="numeric" placeholder="Enter User ID"></label>
+    <label>Registered Mobile Number<input id="mobile" type="tel" autocomplete="tel" inputmode="numeric" placeholder="Enter registered mobile"></label>
+    <button id="login" class="btn btn-primary btn-wide">SIGN IN</button><div id="loginMsg" class="notice"></div>
+  </div>
+</section>
+
+<section id="spmView" class="hidden">
+  <div class="page-head">
+    <div><div class="eyebrow">SPM DAILY UPDATE</div><h1>Daily Toolkit Position</h1><p class="muted">Enter only today's movement. Opening and closing balances are calculated automatically.</p></div>
+    <div class="date-box"><label>Date<input id="spm-date" type="date"></label></div>
+  </div>
+
+  <div class="balance-strip">
+    <div><span>Opening Kits</span><b id="openK">0</b></div><div><span>Opening Articles</span><b id="openA">0</b></div>
+    <div class="balance-close"><span>Closing Kits</span><b id="closeK">0</b></div><div class="balance-close"><span>Closing Articles</span><b id="closeA">0</b></div>
+  </div>
+
+  <form id="spm-form">
+    <div class="section-card movement-card">
+      <div class="section-title"><span>1</span> Today's Movement</div>
+      <div class="table-note">Enter the number for each row. Kits and Articles stay side-by-side for quick SPM entry.</div>
+      <div class="data-table-wrap"><table class="entry-table"><thead><tr><th>Daily Movement</th><th>KITS</th><th>ARTICLES</th></tr></thead><tbody>
+        <tr><th>CAME TODAY</th><td><input id="newKits" type="number" min="0" value="0"></td><td><input id="newArticles" type="number" min="0" value="0"></td></tr>
+        <tr><th>DELIVERED</th><td><input id="deliveredKits" type="number" min="0" value="0"></td><td><input id="deliveredArticles" type="number" min="0" value="0"></td></tr>
+        <tr><th>REDIRECT</th><td><input id="redirectedKits" type="number" min="0" value="0"></td><td><input id="redirectedArticles" type="number" min="0" value="0"></td></tr>
+        <tr><th>RTS / RETURN</th><td><input id="rtsKits" type="number" min="0" value="0"></td><td><input id="rtsArticles" type="number" min="0" value="0"></td></tr>
+      </tbody></table></div>
+    </div>
+
+    <div class="section-card">
+      <div class="section-title"><span>2</span> Remaining Classification</div>
+      <div class="data-table-wrap"><table class="entry-table compact"><thead><tr><th>Pending Classification</th><th>KITS</th><th>ARTICLES</th></tr></thead><tbody>
+        <tr><th>INVALID MOBILE</th><td><input id="invalidKits" type="number" min="0" value="0"></td><td><input id="invalidArticles" type="number" min="0" value="0"></td></tr>
+        <tr><th>TORN / WITHOUT PROPER DETAILS</th><td><input id="tornKits" type="number" min="0" value="0"></td><td><input id="tornArticles" type="number" min="0" value="0"></td></tr>
+        <tr><th>DELIVERABLE</th><td><input id="deliverableKits" type="number" min="0" value="0"></td><td><input id="deliverableArticles" type="number" min="0" value="0"></td></tr>
+        <tr><th>INCOMPLETE</th><td><input id="incompleteKits" type="number" min="0" value="0"></td><td><input id="incompleteArticles" type="number" min="0" value="0"></td></tr>
+      </tbody></table></div>
+    </div>
+
+    <div class="validation-card"><strong>Validation</strong><p id="validation">Validation pending.</p></div>
+    <button class="btn btn-primary btn-submit" type="submit">SUBMIT DAILY REPORT</button>
+  </form>
+</section>
+
+<section id="adminView" class="hidden">
+  <div class="dashboard-head"><div><div class="eyebrow">ADMIN / DPS MONITORING</div><h1>PMV Daily Dashboard</h1><p class="muted">Monitoring date: <b id="monitoring"></b></p></div><div class="dashboard-actions"><label>Date<input id="admin-date" type="date"></label><button id="refresh" class="btn btn-primary">↻ Refresh</button></div></div>
+  <div id="adminStatus" class="notice"></div>
+  <div class="dashboard-section"><div class="section-heading"><h2>Daily Movement Summary</h2><p>Came today, delivered, redirect and RTS — Kits and Articles shown separately.</p></div><div id="stats" class="stats"></div></div>
+  <div class="dashboard-section"><div class="section-heading"><h2>SPM-wise Complete Details</h2><p>All submitted and non-updated SPM fields for the selected date.</p></div><div class="table-wrap"><table id="spmWise"></table></div></div>
+  <div class="dashboard-section"><div class="section-heading"><h2>Office-wise Consolidated Report</h2><p>Opening → Came Today → Redirect → RTS → Delivered → Closing.</p></div><div class="table-wrap"><table id="office"></table></div></div>
+  <div class="dashboard-section"><div class="section-heading"><h2>SPMs Who Have Not Updated</h2><p>Active SPMs without a report for the selected date.</p></div><div class="table-wrap"><table id="pending"></table></div></div>
+</section>
+</main>
+<footer>PMV Toolkit Tracker · Udhampur Division · Designed for future PWA conversion</footer>
+<div id="toast" class="toast"></div>
+<script src="js/config.js"></script><script src="js/api.js"></script><script src="js/auth.js"></script><script src="js/calculations.js"></script><script src="js/validation.js"></script><script src="js/spm-dashboard.js"></script><script src="js/admin-dashboard.js"></script><script src="js/app.js"></script>
+</body></html>
