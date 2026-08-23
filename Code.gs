@@ -95,6 +95,12 @@ function doPost(e) {
           parseSession(body.session)
         ));
 
+      case 'pushArticleStatusToMaster':
+        return out(pushArticleStatusToMaster(
+          body.record,
+          parseSession(body.session)
+        ));
+
       default:
         return out(err('Unknown POST action: ' + body.action));
     }
@@ -636,9 +642,9 @@ function assignedPincodes(officeId) {
   const oid = normalizeId(officeId);
   const pins = [];
 
-  read(S.P).forEach(r => {
+  readSheet(S.P).forEach(r => {
     if (
-      act(r.ACTIVE) &&
+      active(r.ACTIVE) &&
       normalizeId(r.OFFICE_ID) === oid
     ) {
       const pin = normalizePin(r.PINCODE);
@@ -648,13 +654,13 @@ function assignedPincodes(officeId) {
 
   // Fallback to OFFICE_MASTER
   if (!pins.length) {
-    const office = read(S.O).find(
+    const office = readSheet(S.O).find(
       r => normalizeId(r.OFFICE_ID) === oid
     );
 
     if (office) {
-      String(office.PINCODES || '')
-        .split(/[,;\s]+/)
+      String(office.PINCODES || office.PINCODE || '')
+        .split(/[,;\s|]+/)
         .map(normalizePin)
         .filter(Boolean)
         .forEach(pin => pins.push(pin));
@@ -662,38 +668,6 @@ function assignedPincodes(officeId) {
   }
 
   return [...new Set(pins)];
-}
-
-
-  /* ---------- OFFICE_MASTER fallback ---------- */
-
-  const officeRows = readSheet(S.O);
-
-  officeRows.forEach(function(row) {
-
-    const rowOffice = normalizeId(row.OFFICE_ID);
-
-    if (rowOffice !== oid) return;
-
-    const raw =
-      row.PINCODES ||
-      row.PINCODE ||
-      '';
-
-    String(raw)
-      .split(/[,\s;|]+/)
-      .forEach(function(value) {
-
-        const pin = normalizePin(value);
-
-        if (pin) {
-          result[pin] = true;
-        }
-      });
-  });
-
-
-  return Object.keys(result);
 }
 
 
@@ -1463,46 +1437,300 @@ function getAdminArticleStatus(params, session) {
     articleStatusMap(dateValue);
 
 
-  const result =
-    readSheet(S.AS)
-      .filter(function(row) {
-        return dateOnly(row.DATE) === dateValue;
-      })
-      .map(function(row) {
+  /*
+   * Search supports article number and artisan name too,
+   * same refined multi-term matching used for SPM articles.
+   */
 
-        return {
-          date: dateValue,
-          articleKey:
-            String(row.ARTICLE_KEY || ''),
-          barCodeId:
-            String(row.BAR_CODE_ID || ''),
-          pmvApplicationNumber:
-            String(
-              row.PMV_APPLICATION_NUMBER || ''
-            ),
-          officeId:
-            normalizeId(row.OFFICE_ID),
-          officeName:
-            String(row.OFFICE_NAME || ''),
-          spmId:
-            normalizeId(row.SPM_ID),
-          spmName:
-            String(row.SPM_NAME || ''),
-          status:
-            String(row.STATUS || ''),
-          remarks:
-            String(row.REMARKS || ''),
-          updatedAt:
-            String(row.UPDATED_AT || '')
-        };
+  const query =
+    String(
+      params.query ||
+      params.search ||
+      params.q ||
+      ''
+    )
+    .trim()
+    .toUpperCase();
+
+
+  function normalizeSearchText(value) {
+    return String(value == null ? '' : value)
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+
+  let articles = allArticleRows();
+
+  if (query) {
+
+    const searchTerms =
+      query
+        .split(/\s+/)
+        .map(normalizeSearchText)
+        .filter(function(term) {
+          return term !== '';
+        });
+
+    articles = articles.filter(function(article) {
+
+      const searchable = normalizeSearchText([
+        article.BAR_CODE_ID,
+        article.PMV_APPLICATION_NUMBER,
+        article.ARTISAN_NAME,
+        article.MOBILE_NUMBER,
+        article.ARTISAN_CURRENT_ADDRESS,
+        article.CIRCLE_NAME,
+        article.DIVISION_NAME,
+        article.ARTISAN_PIN_CODE,
+        article.DELIVERY_STAFF_ASSIGNED_UNASSIGNED,
+        article.TOOLKIT_DELIVERY_STATUS
+      ].join(' '));
+
+      return searchTerms.every(function(term) {
+        return searchable.indexOf(term) !== -1;
       });
+    });
+  }
+
+
+  /*
+   * Remove duplicates.
+   */
+
+  const seen = {};
+
+  articles = articles.filter(function(article) {
+
+    const key =
+      String(article.__articleKey || '')
+        .trim()
+        .toUpperCase();
+
+    if (!key) return false;
+
+    if (seen[key]) return false;
+
+    seen[key] = true;
+
+    return true;
+  });
+
+
+  const result =
+    articles.map(function(article) {
+
+      const key =
+        String(article.__articleKey || '')
+          .trim()
+          .toUpperCase();
+
+      const status = statuses[key];
+
+      const client =
+        articleClient(article, status);
+
+      client.date = dateValue;
+      client.officeId =
+        status ? normalizeId(status.OFFICE_ID) : '';
+      client.officeName =
+        status ? String(status.OFFICE_NAME || '') : '';
+      client.spmId =
+        status ? normalizeId(status.SPM_ID) : '';
+      client.spmName =
+        status ? String(status.SPM_NAME || '') : '';
+
+      return client;
+    });
 
 
   return ok({
     date: dateValue,
     count: result.length,
-    statuses: result
+    total: result.length,
+    updatedCount: Object.keys(statuses).length,
+    articles: result
   });
+}
+
+
+/* =========================================================
+   PUSH SPM ARTICLE STATUS TO MASTER SHEET
+   ========================================================= */
+
+/*
+ * Finds which column in a given source sheet corresponds to
+ * a canonical article field, using the same alias list the
+ * reader uses. Returns 1-based column index, or -1 if the
+ * sheet has no matching column.
+ */
+
+function findColumnIndex(sheetName, canonicalField) {
+
+  const ws = ss().getSheetByName(sheetName);
+
+  if (!ws) return -1;
+
+  const lastColumn = ws.getLastColumn();
+
+  if (lastColumn < 1) return -1;
+
+  const headers = ws
+    .getRange(1, 1, 1, lastColumn)
+    .getValues()[0]
+    .map(normalizeHeader);
+
+  const aliases =
+    (ARTICLE_ALIASES[canonicalField] || [canonicalField])
+      .map(normalizeHeader);
+
+  for (let i = 0; i < aliases.length; i++) {
+
+    const idx = headers.indexOf(aliases[i]);
+
+    if (idx !== -1) return idx + 1;
+  }
+
+  return -1;
+}
+
+
+/*
+ * Admin/DPS reviews the article-wise table (with whatever
+ * search/status filter they currently have applied) and
+ * pushes the SPM-updated present status back into whichever
+ * source sheet each article came from (ARTICLE_MASTER or
+ * any other discovered article source). Only articles that
+ * actually have an SPM-recorded status for the given date
+ * are written; the rest are reported back as skipped.
+ */
+
+function pushArticleStatusToMaster(record, session) {
+
+  const a = auth(session);
+
+  if (
+    a.role !== ROLE.ADMIN &&
+    a.role !== ROLE.DPS
+  ) {
+    throw new Error(
+      'Only Admin/DPS can push article status to the master sheet.'
+    );
+  }
+
+  record = record || {};
+
+  const dateValue =
+    String(
+      record.date ||
+      today()
+    );
+
+  const keys =
+    Array.isArray(record.articleKeys)
+      ? record.articleKeys
+      : [];
+
+  const wanted = {};
+
+  keys.forEach(function(k) {
+
+    const key = String(k || '').trim().toUpperCase();
+
+    if (key) wanted[key] = true;
+  });
+
+  if (!Object.keys(wanted).length) {
+    throw new Error('No articles to push.');
+  }
+
+  const statuses = articleStatusMap(dateValue);
+  const all = allArticleRows();
+
+  const colCache = {};
+
+  let pushed = 0;
+  let skipped = 0;
+  const details = [];
+
+  all.forEach(function(article) {
+
+    const key =
+      String(article.__articleKey || '')
+        .trim()
+        .toUpperCase();
+
+    if (!wanted[key]) return;
+
+    const status = statuses[key];
+
+    if (!status || !String(status.STATUS || '').trim()) {
+
+      skipped++;
+
+      details.push({
+        articleKey: key,
+        result: 'skipped',
+        reason: 'No SPM status update found for this date.'
+      });
+
+      return;
+    }
+
+    const sheetName = article.__sheet;
+
+    if (colCache[sheetName] === undefined) {
+      colCache[sheetName] =
+        findColumnIndex(sheetName, 'TOOLKIT_DELIVERY_STATUS');
+    }
+
+    const col = colCache[sheetName];
+
+    if (!col || col < 1) {
+
+      skipped++;
+
+      details.push({
+        articleKey: key,
+        result: 'skipped',
+        reason: 'No status column found in ' + sheetName + '.'
+      });
+
+      return;
+    }
+
+    sh(sheetName)
+      .getRange(article.__row, col)
+      .setValue(status.STATUS);
+
+    pushed++;
+
+    details.push({
+      articleKey: key,
+      result: 'pushed',
+      sheet: sheetName,
+      status: status.STATUS
+    });
+  });
+
+  audit(
+    a.user.USER_ID,
+    'PUSH_ARTICLE_STATUS_TO_MASTER',
+    dateValue + ' pushed=' + pushed + ' skipped=' + skipped
+  );
+
+  return ok(
+    {
+      date: dateValue,
+      pushed: pushed,
+      skipped: skipped,
+      details: details
+    },
+    pushed + ' article(s) pushed to master sheet' +
+      (skipped ? ', ' + skipped + ' skipped.' : '.')
+  );
 }
 
 

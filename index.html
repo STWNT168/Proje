@@ -109,7 +109,26 @@
   <div class="dashboard-section"><div class="section-heading"><h2>Office-wise Consolidated Report</h2><p>Opening → Came Today → Redirect → RTS → Delivered → Closing.</p></div><div class="table-wrap"><table id="office"></table></div></div>
 
   <div class="dashboard-section"><div class="section-heading"><h2>Article-wise Daily Status</h2><p>Admin/DPS can view article details and the present status updated by each SPM.</p></div>
-    <div class="article-tools"><input id="admin-article-search" type="search" placeholder="Search barcode / PMV application / artisan / PIN code"><button id="admin-article-fetch" class="btn btn-primary">FETCH</button></div>
+    <div class="article-tools">
+  <input
+    id="admin-article-search"
+    type="search"
+    placeholder="Search barcode / PMV application / artisan / PIN code">
+
+  <select id="admin-article-status-filter" aria-label="Filter article status">
+    <option value="All">All Status</option>
+    <option value="Pending">Pending</option>
+    <option value="Delivered">Delivered</option>
+    <option value="Redirected">Redirected</option>
+    <option value="RTS / Return">RTS / Return</option>
+    <option value="Not Received">Not Received</option>
+    <option value="Other">Other</option>
+  </select>
+
+  <button id="admin-article-fetch" type="button" class="btn btn-primary">FETCH</button>
+
+  <button id="admin-article-push" type="button" class="btn btn-light">PUSH TO MASTER</button>
+</div>
     <div id="admin-article-status" class="notice"></div>
     <div class="table-wrap"><table id="adminArticles"></table></div>
   </div>
