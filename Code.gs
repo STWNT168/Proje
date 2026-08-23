@@ -35,6 +35,11 @@ function doGet(e) {
 
     switch (String(p.action || '')) {
 
+      // GET login is intentionally supported as a fallback for browsers/hosts
+      // where cross-origin POST to Apps Script produces a generic "Failed to fetch".
+      case 'login':
+        return out(login(p.userId, p.mobile));
+
       case 'getPmvOpeningBalance':
         return out(getOpeningBalance(p.date, session));
 
