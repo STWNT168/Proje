@@ -15,48 +15,311 @@ function emptyClient(d){return{date:d,openingKits:0,openingArticles:0,newKits:0,
 function client(r){return{date:date(r.DATE),openingKits:num(r.OPENING_KITS),openingArticles:num(r.OPENING_ARTICLES),newKits:num(r.NEW_KITS),newArticles:num(r.NEW_ARTICLES),redirectedKits:num(r.REDIRECTED_KITS),redirectedArticles:num(r.REDIRECTED_ARTICLES),rtsKits:num(r.RTS_KITS),rtsArticles:num(r.RTS_ARTICLES),deliveredKits:num(r.DELIVERED_KITS),deliveredArticles:num(r.DELIVERED_ARTICLES),invalidMobileKits:num(r.INVALID_MOBILE_KITS),invalidMobileArticles:num(r.INVALID_MOBILE_ARTICLES),tornKits:num(r.TORN_KITS),tornArticles:num(r.TORN_ARTICLES),deliverableKits:num(r.DELIVERABLE_KITS),deliverableArticles:num(r.DELIVERABLE_ARTICLES),incompleteKits:num(r.INCOMPLETE_KITS),incompleteArticles:num(r.INCOMPLETE_ARTICLES),closingPendingKits:num(r.CLOSING_PENDING_KITS),closingPendingArticles:num(r.CLOSING_PENDING_ARTICLES)}}
 function bo(x){return{officeId:String(x.OFFICE_ID||''),officeName:String(x.OFFICE_NAME||''),totalSpms:0,updatedSpms:0,pendingSpms:0,openingKits:0,newKits:0,redirectedKits:0,rtsKits:0,deliveredKits:0,closingPendingKits:0,openingArticles:0,newArticles:0,redirectedArticles:0,rtsArticles:0,deliveredArticles:0,closingPendingArticles:0}}
 
-function normalizePin(v){return String(v||'').replace(/\D/g,'').trim()}
-function articleKey(r){return String(r.PMV_APPLICATION_NUMBER||r.BAR_CODE_ID||'').trim()}
-function assignedPincodes(officeId){
-  let pins=[];
-  let pm=read(S.P).filter(r=>act(r.ACTIVE)&&String(r.OFFICE_ID)===String(officeId));
-  pm.forEach(r=>{let p=normalizePin(r.PINCODE);if(p)pins.push(p)});
-  if(!pins.length){
-    let o=read(S.O).find(r=>String(r.OFFICE_ID)===String(officeId));
-    if(o)String(o.PINCODES||'').split(/[,;\s]+/).map(normalizePin).filter(Boolean).forEach(p=>pins.push(p));
-  }
-  return [...new Set(pins)];
+
+function articleNormalize(v){
+  return String(v == null ? '' : v).trim();
 }
+
+function articlePin(v){
+  return articleNormalize(v).replace(/\D/g,'');
+}
+
+function articleKey(r){
+  return articleNormalize(r.PMV_APPLICATION_NUMBER) ||
+         articleNormalize(r.BAR_CODE_ID);
+}
+
+function articleReadSheet(name){
+  var sh=SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(name);
+  if(!sh || sh.getLastRow()<2) return [];
+  var values=sh.getDataRange().getValues();
+  var headers=values.shift().map(articleNormalize);
+  return values.map(function(row,i){
+    var o={__row:i+2};
+    headers.forEach(function(h,j){if(h)o[h]=row[j];});
+    return o;
+  });
+}
+
+function articleMasterRows(){
+  return articleReadSheet('ARTICLE_MASTER').filter(function(r){
+    return articleKey(r)!=='';
+  });
+}
+
+function articleAuditRows(){
+  return articleReadSheet('AUDIT_LOG').filter(function(r){
+    return articleKey(r)!=='';
+  });
+}
+
+/* Compatibility: normal article source is ARTICLE_MASTER. */
 function articleRows(){
-  return read(S.A).filter(r=>String(r.PMV_APPLICATION_NUMBER||r.BAR_CODE_ID||'').trim());
+  return articleMasterRows();
 }
-function statusMap(d){
-  let m={};read(S.AS).filter(r=>date(r.DATE)===String(d)).forEach(r=>m[String(r.ARTICLE_KEY)]=r);return m;
+
+function articleAssignedPins(officeId){
+  var pins=[];
+  read(S.P).forEach(function(r){
+    if(act(r.ACTIVE) && articleNormalize(r.OFFICE_ID)===articleNormalize(officeId)){
+      var p=articlePin(r.PINCODE);
+      if(p) pins.push(p);
+    }
+  });
+
+  if(!pins.length){
+    var o=read(S.O).find(function(r){
+      return articleNormalize(r.OFFICE_ID)===articleNormalize(officeId);
+    });
+    if(o){
+      articleNormalize(o.PINCODES).split(/[,;\s]+/).forEach(function(v){
+        var p=articlePin(v);
+        if(p) pins.push(p);
+      });
+    }
+  }
+  return Array.from(new Set(pins));
 }
-function articleClient(r,st){
-  return {articleKey:articleKey(r),barCodeId:String(r.BAR_CODE_ID||''),pmvApplicationNumber:String(r.PMV_APPLICATION_NUMBER||''),artisanName:String(r.ARTISAN_NAME||''),mobileNumber:String(r.MOBILE_NUMBER||''),address:String(r.ARTISAN_CURRENT_ADDRESS||''),circleName:String(r.CIRCLE_NAME||''),divisionName:String(r.DIVISION_NAME||''),pinCode:normalizePin(r.ARTISAN_PIN_CODE),deliveryStaff:String(r.DELIVERY_STAFF_ASSIGNED_UNASSIGNED||''),sourceStatus:String(r.TOOLKIT_DELIVERY_STATUS||''),presentStatus:String(st?.STATUS||r.TOOLKIT_DELIVERY_STATUS||'Pending'),remarks:String(st?.REMARKS||''),updatedAt:st?.UPDATED_AT?String(st.UPDATED_AT):''};
+
+function articleStatusMap(d){
+  var m={};
+  read(S.AS).forEach(function(r){
+    if(date(r.DATE)===String(d)){
+      var k=articleNormalize(r.ARTICLE_KEY);
+      if(k)m[k]=r;
+    }
+  });
+  return m;
 }
+
+function articleClient(r,st,source){
+  return {
+    articleKey:articleKey(r),
+    barCodeId:articleNormalize(r.BAR_CODE_ID),
+    pmvApplicationNumber:articleNormalize(r.PMV_APPLICATION_NUMBER),
+    artisanName:articleNormalize(r.ARTISAN_NAME),
+    mobileNumber:articleNormalize(r.MOBILE_NUMBER),
+    address:articleNormalize(r.ARTISAN_CURRENT_ADDRESS),
+    circleName:articleNormalize(r.CIRCLE_NAME),
+    divisionName:articleNormalize(r.DIVISION_NAME),
+    pinCode:articlePin(r.ARTISAN_PIN_CODE),
+    deliveryStaff:articleNormalize(r.DELIVERY_STAFF_ASSIGNED_UNASSIGNED),
+    sourceStatus:articleNormalize(r.TOOLKIT_DELIVERY_STATUS),
+    presentStatus:articleNormalize(st && st.STATUS) ||
+                   articleNormalize(r.TOOLKIT_DELIVERY_STATUS) ||
+                   'Pending',
+    remarks:articleNormalize(st && st.REMARKS),
+    updatedAt:st && st.UPDATED_AT ? String(st.UPDATED_AT) : '',
+    dataSource:source || 'master'
+  };
+}
+
+function articleRowsForSource(source){
+  source=articleNormalize(source || 'master').toLowerCase();
+
+  if(source==='audit') return articleAuditRows();
+
+  var master=articleMasterRows();
+
+  if(source==='both'){
+    var seen={};
+    master.forEach(function(r){seen[articleKey(r)]=true;});
+    articleAuditRows().forEach(function(r){
+      var k=articleKey(r);
+      if(k && !seen[k]){
+        r.__auditFallback=true;
+        master.push(r);
+        seen[k]=true;
+      }
+    });
+  }
+
+  return master;
+}
+
 function spmArticles(p,s){
-  let a=auth(s);if(a.role!==ROLE.SPM)throw Error('Only SPM users can access article details.');
-  let d=String(p.date||today()),pins=assignedPincodes(a.user.OFFICE_ID),q=String(p.q||'').trim().toLowerCase(),limit=Math.min(Math.max(Number(p.limit||100),1),500),rows=articleRows(),sm=statusMap(d),out=[];
-  rows.forEach(r=>{if(out.length>=limit)return;let pin=normalizePin(r.ARTISAN_PIN_CODE);if(!pins.includes(pin))return;let hay=[r.BAR_CODE_ID,r.PMV_APPLICATION_NUMBER,r.ARTISAN_NAME,r.MOBILE_NUMBER,pin].join(' ').toLowerCase();if(q&&!hay.includes(q))return;out.push(articleClient(r,sm[articleKey(r)]))});
-  return ok({date:d,officeId:String(a.user.OFFICE_ID),officeName:String(a.user.OFFICE_NAME||''),pincodes:pins,articles:out,totalVisible:rows.filter(r=>pins.includes(normalizePin(r.ARTISAN_PIN_CODE))).length});
+  var a=auth(s);
+  if(a.role!==ROLE.SPM)
+    throw Error('Only SPM users can access article details.');
+
+  var source=articleNormalize(p && p.source || 'master').toLowerCase();
+  if(['master','audit','both'].indexOf(source)<0) source='master';
+
+  var d=articleNormalize(p && p.date || today());
+  var q=articleNormalize(p && p.q).toLowerCase();
+  var limit=Math.min(Math.max(Number(p && p.limit || 300),1),1000);
+  var officeId=articleNormalize(a.user.OFFICE_ID);
+  var pins=articleAssignedPins(officeId);
+  var status=articleStatusMap(d);
+  var rows=articleRowsForSource(source);
+  var articles=[];
+  var matched=0;
+
+  rows.forEach(function(r){
+    if(articles.length>=limit)return;
+
+    var pin=articlePin(r.ARTISAN_PIN_CODE);
+    if(!pins.includes(pin))return;
+
+    matched++;
+
+    var searchable=[
+      r.BAR_CODE_ID,
+      r.PMV_APPLICATION_NUMBER,
+      r.ARTISAN_NAME,
+      r.MOBILE_NUMBER,
+      r.ARTISAN_PIN_CODE
+    ].join(' ').toLowerCase();
+
+    if(q && searchable.indexOf(q)<0)return;
+
+    var key=articleKey(r);
+    articles.push(articleClient(
+      r,
+      status[key],
+      r.__auditFallback ? 'audit-fallback' :
+      source==='audit' ? 'audit' : 'master'
+    ));
+  });
+
+  return ok({
+    date:d,
+    officeId:officeId,
+    officeName:articleNormalize(a.user.OFFICE_NAME),
+    source:source,
+    pincodes:pins,
+    articles:articles,
+    totalVisible:matched,
+    returned:articles.length,
+    masterCount:articleMasterRows().length,
+    auditArticleCount:articleAuditRows().length,
+    diagnostic:
+      rows.length===0 ?
+        (source==='audit'
+          ? 'AUDIT_LOG has no compatible article records.'
+          : 'ARTICLE_MASTER has no article records.') :
+      pins.length===0 ?
+        'No active PIN codes are assigned to this SPM office.' :
+      matched===0 ?
+        'Records exist, but none match the SPM assigned PIN codes.' :
+        'Article records loaded successfully.'
+  });
 }
+
 function updateArticleStatus(x,s){
-  let a=auth(s);if(a.role!==ROLE.SPM)throw Error('Only SPM users can update article status.');
-  let d=String(x?.date||today()),key=String(x?.articleKey||x?.pmvApplicationNumber||x?.barCodeId||'').trim(),status=String(x?.status||'').trim(),remarks=String(x?.remarks||'').trim();
-  let allowed=['Pending','Delivered','Redirected','RTS / Return','Not Received','Other'];if(!allowed.includes(status))throw Error('Invalid article status.');
-  let r=articleRows().find(z=>articleKey(z)===key);if(!r)throw Error('Article not found.');
-  if(!assignedPincodes(a.user.OFFICE_ID).includes(normalizePin(r.ARTISAN_PIN_CODE)))throw Error('This article is outside your assigned pincode list.');
-  let sh=sheet(S.AS),old=read(S.AS).find(z=>date(z.DATE)===d&&String(z.ARTICLE_KEY)===key),row=[d,key,String(r.BAR_CODE_ID||''),String(r.PMV_APPLICATION_NUMBER||''),String(a.user.OFFICE_ID),String(a.user.OFFICE_NAME||''),String(a.user.USER_ID),String(a.user.NAME||''),status,remarks,new Date()];
-  if(old)sh.getRange(old.__row,1,1,row.length).setValues([row]);else sh.appendRow(row);
-  audit(a.user.USER_ID,'ARTICLE_STATUS',d+' | '+key+' | '+status);return ok({articleKey:key,status,remarks,date:d},'Article status updated.');
+  var a=auth(s);
+  if(a.role!==ROLE.SPM)
+    throw Error('Only SPM users can update article status.');
+
+  var d=articleNormalize(x && x.date || today());
+  var key=articleNormalize(
+    x && (x.articleKey || x.pmvApplicationNumber || x.barCodeId)
+  );
+  var status=articleNormalize(x && x.status);
+  var remarks=articleNormalize(x && x.remarks);
+
+  var allowed=['Pending','Delivered','Redirected','RTS / Return','Not Received','Other'];
+  if(allowed.indexOf(status)<0)
+    throw Error('Invalid article status.');
+
+  /* Updates always require the authoritative ARTICLE_MASTER record. */
+  var r=articleMasterRows().find(function(z){return articleKey(z)===key;});
+  if(!r)throw Error('Article not found in ARTICLE_MASTER.');
+
+  var officeId=articleNormalize(a.user.OFFICE_ID);
+  if(articleAssignedPins(officeId).indexOf(articlePin(r.ARTISAN_PIN_CODE))<0)
+    throw Error('This article is outside your assigned pincode list.');
+
+  var sh=SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('ARTICLE_STATUS');
+  if(!sh)throw Error('Missing sheet ARTICLE_STATUS. Run setupSpreadsheet() once.');
+
+  var existing=read(S.AS).find(function(z){
+    return date(z.DATE)===d && articleNormalize(z.ARTICLE_KEY)===key;
+  });
+
+  var row=[
+    d,key,
+    articleNormalize(r.BAR_CODE_ID),
+    articleNormalize(r.PMV_APPLICATION_NUMBER),
+    officeId,
+    articleNormalize(a.user.OFFICE_NAME),
+    articleNormalize(a.user.USER_ID),
+    articleNormalize(a.user.NAME),
+    status,remarks,new Date()
+  ];
+
+  if(existing)sh.getRange(existing.__row,1,1,row.length).setValues([row]);
+  else sh.appendRow(row);
+
+  audit(a.user.USER_ID,'ARTICLE_STATUS',d+' | '+key+' | '+status);
+  return ok({articleKey:key,status:status,date:d,source:'ARTICLE_MASTER'},'Article status updated.');
 }
+
 function adminArticleStatus(p,s){
-  let a=auth(s);if(![ROLE.ADMIN,ROLE.DPS].includes(a.role))throw Error('Only DPS/Admin users can access article status.');
-  let d=String(p.date||today()),q=String(p.q||'').trim().toLowerCase(),office=String(p.officeId||'').trim(),limit=Math.min(Math.max(Number(p.limit||300),1),1000),sm=statusMap(d),rows=articleRows(),out=[];
-  rows.forEach(r=>{if(out.length>=limit)return;let pin=normalizePin(r.ARTISAN_PIN_CODE),key=articleKey(r),st=sm[key];if(office&&String(st?.OFFICE_ID||'')!==office)return;let c=articleClient(r,st),hay=[c.barCodeId,c.pmvApplicationNumber,c.artisanName,c.pinCode,c.presentStatus,c.officeName].join(' ').toLowerCase();if(q&&!hay.includes(q))return;out.push({...c,officeId:String(st?.OFFICE_ID||''),officeName:String(st?.OFFICE_NAME||''),spmId:String(st?.SPM_ID||''),spmName:String(st?.SPM_NAME||'')})});
-  return ok({date:d,articles:out,total:out.length,updatedCount:read(S.AS).filter(r=>date(r.DATE)===d&&(!office||String(r.OFFICE_ID)===office)).length});
+  var a=auth(s);
+  if(![ROLE.ADMIN,ROLE.DPS].includes(a.role))
+    throw Error('Only DPS/Admin users can access article status.');
+
+  var d=articleNormalize(p && p.date || today());
+  var source=articleNormalize(p && p.source || 'master').toLowerCase();
+  if(['master','audit','both'].indexOf(source)<0)source='master';
+
+  var q=articleNormalize(p && p.q).toLowerCase();
+  var office=articleNormalize(p && p.officeId);
+  var limit=Math.min(Math.max(Number(p && p.limit || 500),1),2000);
+  var status=articleStatusMap(d);
+  var rows=articleRowsForSource(source);
+  var outRows=[];
+
+  rows.forEach(function(r){
+    if(outRows.length>=limit)return;
+
+    var st=status[articleKey(r)];
+    var c=articleClient(
+      r,st,
+      r.__auditFallback ? 'audit-fallback' :
+      source==='audit' ? 'audit' : 'master'
+    );
+
+    var rowOffice=articleNormalize(st && st.OFFICE_ID);
+    if(office && rowOffice!==office)return;
+
+    var hay=[
+      c.barCodeId,c.pmvApplicationNumber,c.artisanName,
+      c.pinCode,c.presentStatus,rowOffice
+    ].join(' ').toLowerCase();
+
+    if(q && hay.indexOf(q)<0)return;
+
+    outRows.push(Object.assign({},c,{
+      officeId:rowOffice,
+      officeName:articleNormalize(st && st.OFFICE_NAME),
+      spmId:articleNormalize(st && st.SPM_ID),
+      spmName:articleNormalize(st && st.SPM_NAME)
+    }));
+  });
+
+  return ok({
+    date:d,
+    source:source,
+    articles:outRows,
+    total:outRows.length,
+    masterCount:articleMasterRows().length,
+    auditArticleCount:articleAuditRows().length
+  });
+}
+
+function testDualSourceArticles(){
+  var master=articleMasterRows();
+  var audit=articleAuditRows();
+  var result={
+    masterArticleCount:master.length,
+    auditArticleCount:audit.length,
+    masterFirst:master.length?articleClient(master[0],null,'master'):null,
+    auditFirst:audit.length?articleClient(audit[0],null,'audit'):null
+  };
+  Logger.log(JSON.stringify(result,null,2));
+  return result;
 }
 function findUser(id){return read(S.U).find(r=>String(r.USER_ID).trim()===String(id).trim())}function findReport(id,d){return read(S.R).find(r=>String(r.SPM_ID)===String(id)&&date(r.DATE)===d)}function auth(s){if(!s?.userId||!s?.token)throw Error('Not authenticated. Please sign in again.');let x=read(S.SS).find(r=>String(r.TOKEN)===String(s.token)&&String(r.USER_ID)===String(s.userId)&&act(r.ACTIVE));if(!x)throw Error('Session expired or invalid. Please log in again.');if(new Date(x.EXPIRES_AT).getTime()<=Date.now())throw Error('Session expired. Please log in again.');let u=findUser(s.userId);if(!u||!act(u.ACTIVE))throw Error('Account is inactive.');return{user:u,role:String(u.ROLE||'').toUpperCase()}}
 function parse(s){if(!s)return null;if(typeof s==='object')return s;try{return JSON.parse(s)}catch(e){return null}}function read(n){let sh=sheet(n),v=sh.getDataRange().getValues(),h=v.shift()||[];return v.map((r,i)=>{let o={__row:i+2};h.forEach((k,j)=>o[k]=r[j]);return o})}function sheet(n){let sh=SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(n);if(!sh)throw Error('Missing sheet '+n+'. Run setupSpreadsheet() once.');return sh}function date(v){return v instanceof Date?Utilities.formatDate(v,TZ,'yyyy-MM-dd'):String(v||'').slice(0,10)}function today(){return Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd')}function num(v){let n=Number(v);return Number.isFinite(n)?n:0}function act(v){return v===true||['true','yes','1','active','y'].includes(String(v).toLowerCase().trim())}function mob(v){return String(v||'').replace(/\D/g,'')}function audit(u,a,d){try{sheet(S.A).appendRow([new Date(),u,a,d])}catch(e){}}function ok(d,m){return{success:true,data:d,message:m||'OK'}}function err(m){return{success:false,data:null,message:String(m||'Request failed.')}}function out(x){return ContentService.createTextOutput(JSON.stringify(x)).setMimeType(ContentService.MimeType.JSON)}
