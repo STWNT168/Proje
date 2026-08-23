@@ -1,0 +1,37 @@
+PMV Toolkit Tracker v5.1-fixed
+=============================
+
+Changes added to the existing Proje codebase:
+
+1. SPM article search
+   - Search across barcode, PMV application, artisan, mobile, address,
+     circle, division, PIN, delivery staff and source status.
+   - Case/punctuation/spacing tolerant multi-term search.
+   - Keeps physical article rows/barcodes separate even when PMV application
+     numbers repeat.
+   - Displays all available article fields in the SPM dashboard.
+   - Status filter retained and improved.
+
+2. Admin/DPS article management
+   - Search and filter by all article fields.
+   - Direct ARTICLE_MASTER/source status update per article.
+   - Master sync state shown.
+   - Direct edits and push operations audited.
+
+3. Dashboard
+   - Article status summary cards.
+   - Master synced/pending-sync counts.
+   - SPM update percentage.
+   - Office-wise movement aggregation fixed so selected-date values are
+     consolidated from SPM reports rather than blank/zero placeholders.
+
+4. Compatibility
+   - Existing PMV report/authentication/endpoints retained.
+   - New endpoint is additive: updateArticleMaster.
+   - Existing PUSH TO MASTER remains available.
+
+Deployment:
+- Replace/deploy Code.gs as the Apps Script backend.
+- Replace the web files with this package.
+- Existing spreadsheet data is preserved.
+- Run setupSpreadsheet() once if required for missing sheets/headers.

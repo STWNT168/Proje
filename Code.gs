@@ -101,6 +101,12 @@ function doPost(e) {
           parseSession(body.session)
         ));
 
+      case 'updateArticleMaster':
+        return out(updateArticleMaster(
+          body.record,
+          parseSession(body.session)
+        ));
+
       default:
         return out(err('Unknown POST action: ' + body.action));
     }
@@ -778,15 +784,31 @@ function aliasValue(row, field) {
 }
 
 
+function normalizeSearchText(value) {
+  return String(value == null ? '' : value)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function articleKey(row) {
+  // Prefer physical barcode so multiple barcodes under one PMV
+  // application remain individually searchable and editable.
+  const barcode = String(row.BAR_CODE_ID || '').trim();
+  const app = String(row.PMV_APPLICATION_NUMBER || '').trim();
+  return barcode || app;
+}
 
-  const app =
-    String(row.PMV_APPLICATION_NUMBER || '').trim();
-
-  const barcode =
-    String(row.BAR_CODE_ID || '').trim();
-
-  return app || barcode;
+function articleKeysForStatus(article) {
+  const keys = [];
+  const key = String(article.__articleKey || '').trim().toUpperCase();
+  const app = String(article.PMV_APPLICATION_NUMBER || '').trim().toUpperCase();
+  const barcode = String(article.BAR_CODE_ID || '').trim().toUpperCase();
+  if (key) keys.push(key);
+  if (barcode && keys.indexOf(barcode) === -1) keys.push(barcode);
+  if (app && keys.indexOf(app) === -1) keys.push(app);
+  return keys;
 }
 
 
@@ -958,74 +980,26 @@ function articleSourceSheets() {
 
 
 function allArticleRows() {
-
   const sheets = articleSourceSheets();
-
-  const map = {};
-  const order = [];
+  const result = [];
 
   sheets.forEach(function(sheetName) {
-
-    articleRowsFromSheet(sheetName)
-      .forEach(function(article) {
-
-        const key =
-          String(article.__articleKey || '')
-            .trim()
-            .toUpperCase();
-
-        if (!key) return;
-
-        if (!map[key]) {
-
-          map[key] = article;
-          order.push(key);
-
-        } else {
-
-          /*
-           * Same application/article key already seen
-           * (e.g. one artisan with multiple physical
-           * barcodes/kits under the same PMV application
-           * number, sitting on separate rows). Merge the
-           * extra barcode(s) into the kept row instead of
-           * silently dropping them, so every barcode stays
-           * searchable.
-           */
-
-          const existing = map[key];
-
-          const existingCodes =
-            String(existing.BAR_CODE_ID || '')
-              .split(/[,;\s]+/)
-              .filter(Boolean);
-
-          String(article.BAR_CODE_ID || '')
-            .split(/[,;\s]+/)
-            .filter(Boolean)
-            .forEach(function(code) {
-              if (existingCodes.indexOf(code) === -1) {
-                existingCodes.push(code);
-              }
-            });
-
-          existing.BAR_CODE_ID = existingCodes.join(',');
-        }
-      });
+    articleRowsFromSheet(sheetName).forEach(function(article) {
+      // Keep every physical row. A PMV application may legitimately
+      // contain multiple barcodes/articles; hiding them caused search
+      // and master updates to miss records.
+      result.push(article);
+    });
   });
 
-  return order.map(function(key) {
-    return map[key];
-  });
+  return result;
 }
-
 
 /* =========================================================
    ARTICLE STATUS
    ========================================================= */
 
 function articleStatusMap(dateValue) {
-
   const d = dateOnly(dateValue);
   const map = {};
 
@@ -1034,18 +1008,19 @@ function articleStatusMap(dateValue) {
       return dateOnly(row.DATE) === d;
     })
     .forEach(function(row) {
-
-      const key =
-        String(row.ARTICLE_KEY || '')
-          .trim()
-          .toUpperCase();
-
-      if (key) {
-        map[key] = row;
-      }
+      const key = String(row.ARTICLE_KEY || '').trim().toUpperCase();
+      if (key) map[key] = row;
     });
 
   return map;
+}
+
+function statusForArticle(article, statuses) {
+  const keys = articleKeysForStatus(article);
+  for (let i = 0; i < keys.length; i++) {
+    if (statuses[keys[i]]) return statuses[keys[i]];
+  }
+  return null;
 }
 
 
@@ -1257,27 +1232,6 @@ function getSpmArticles(params, session) {
     });
 
 
-  /*
-   * Remove duplicates.
-   */
-
-  const seen = {};
-
-  articles = articles.filter(function(article) {
-
-    const key =
-      String(article.__articleKey || '')
-        .trim()
-        .toUpperCase();
-
-    if (!key) return false;
-
-    if (seen[key]) return false;
-
-    seen[key] = true;
-
-    return true;
-  });
 
 
   const result =
@@ -1290,7 +1244,7 @@ function getSpmArticles(params, session) {
 
       return articleClient(
         article,
-        statuses[key]
+        statusForArticle(article, statuses)
       );
     });
 
@@ -1528,61 +1482,47 @@ function getAdminArticleStatus(params, session) {
   }
 
 
-  /*
-   * Remove duplicates.
-   */
-
-  const seen = {};
-
-  articles = articles.filter(function(article) {
-
-    const key =
-      String(article.__articleKey || '')
-        .trim()
-        .toUpperCase();
-
-    if (!key) return false;
-
-    if (seen[key]) return false;
-
-    seen[key] = true;
-
-    return true;
-  });
 
 
   const result =
     articles.map(function(article) {
-
-      const key =
-        String(article.__articleKey || '')
-          .trim()
-          .toUpperCase();
-
-      const status = statuses[key];
-
-      const client =
-        articleClient(article, status);
+      const status = statusForArticle(article, statuses);
+      const client = articleClient(article, status);
 
       client.date = dateValue;
-      client.officeId =
-        status ? normalizeId(status.OFFICE_ID) : '';
-      client.officeName =
-        status ? String(status.OFFICE_NAME || '') : '';
-      client.spmId =
-        status ? normalizeId(status.SPM_ID) : '';
-      client.spmName =
-        status ? String(status.SPM_NAME || '') : '';
+      client.officeId = status ? normalizeId(status.OFFICE_ID) : '';
+      client.officeName = status ? String(status.OFFICE_NAME || '') : '';
+      client.spmId = status ? normalizeId(status.SPM_ID) : '';
+      client.spmName = status ? String(status.SPM_NAME || '') : '';
+
+      // Master is considered synced when its current source status
+      // equals the SPM-recorded status for this date.
+      client.masterSyncStatus = status
+        ? (normalizeSearchText(client.sourceStatus) === normalizeSearchText(status.STATUS) ? 'Synced' : 'Pending Sync')
+        : 'Not Updated';
 
       return client;
     });
 
+  const statusCounts = {};
+  result.forEach(function(r) {
+    const s = String(r.presentStatus || 'Pending');
+    statusCounts[s] = (statusCounts[s] || 0) + 1;
+  });
+
+  const syncCounts = {Synced:0, 'Pending Sync':0, 'Not Updated':0};
+  result.forEach(function(r) {
+    if (syncCounts[r.masterSyncStatus] === undefined) syncCounts[r.masterSyncStatus] = 0;
+    syncCounts[r.masterSyncStatus]++;
+  });
 
   return ok({
     date: dateValue,
     count: result.length,
     total: result.length,
     updatedCount: Object.keys(statuses).length,
+    statusCounts: statusCounts,
+    syncCounts: syncCounts,
     articles: result
   });
 }
@@ -1696,7 +1636,7 @@ function pushArticleStatusToMaster(record, session) {
 
     if (!wanted[key]) return;
 
-    const status = statuses[key];
+    const status = statusForArticle(article, statuses);
 
     if (!status || !String(status.STATUS || '').trim()) {
 
@@ -1763,6 +1703,75 @@ function pushArticleStatusToMaster(record, session) {
     pushed + ' article(s) pushed to master sheet' +
       (skipped ? ', ' + skipped + ' skipped.' : '.')
   );
+}
+
+
+/* =========================================================
+   DIRECT ADMIN ARTICLE MASTER UPDATE
+   ========================================================= */
+
+function findArticleByKey(articleKeyValue) {
+  const wanted = normalizeSearchText(articleKeyValue);
+  if (!wanted) return null;
+
+  const rows = allArticleRows();
+  for (let i = 0; i < rows.length; i++) {
+    const a = rows[i];
+    const candidates = articleKeysForStatus(a).map(normalizeSearchText);
+    if (candidates.indexOf(wanted) !== -1) return a;
+  }
+  return null;
+}
+
+function updateArticleMaster(record, session) {
+  const a = auth(session);
+
+  if (a.role !== ROLE.ADMIN && a.role !== ROLE.DPS) {
+    throw new Error('Only Admin/DPS can update ARTICLE_MASTER.');
+  }
+
+  record = record || {};
+  const key = String(record.articleKey || record.barCodeId || record.pmvApplicationNumber || '').trim();
+  const status = String(record.status || record.presentStatus || '').trim();
+
+  if (!key) throw new Error('Article key/barcode is required.');
+  if (!status) throw new Error('Article status is required.');
+
+  const article = findArticleByKey(key);
+  if (!article) throw new Error('Article not found in the article master/source.');
+
+  const col = findColumnIndex(article.__sheet, 'TOOLKIT_DELIVERY_STATUS');
+  if (col < 1) {
+    throw new Error('Status column not found in ' + article.__sheet + '.');
+  }
+
+  const ws = sh(article.__sheet);
+  const oldStatus = String(article.TOOLKIT_DELIVERY_STATUS || '');
+  ws.getRange(article.__row, col).setValue(status);
+
+  // Record the direct master change as a first-class audit event.
+  audit(
+    a.user.USER_ID,
+    'DIRECT_ARTICLE_MASTER_UPDATE',
+    JSON.stringify({
+      articleKey: key,
+      sheet: article.__sheet,
+      row: article.__row,
+      oldStatus: oldStatus,
+      newStatus: status
+    })
+  );
+
+  return ok({
+    articleKey: key,
+    barcodeId: String(article.BAR_CODE_ID || ''),
+    pmvApplicationNumber: String(article.PMV_APPLICATION_NUMBER || ''),
+    sheet: article.__sheet,
+    row: article.__row,
+    oldStatus: oldStatus,
+    newStatus: status,
+    updatedAt: new Date().toISOString()
+  }, 'Article master updated directly.');
 }
 
 
@@ -2444,16 +2453,45 @@ function getAdminDashboard(dateValue, session) {
 
     officeMap[oid].totalSpms++;
 
-
-    if (
-      reportMap[
-        normalizeId(u.USER_ID)
-      ]
-    ) {
+    if (reportMap[normalizeId(u.USER_ID)]) {
       officeMap[oid].updatedSpms++;
     } else {
       officeMap[oid].pendingSpms++;
     }
+  });
+
+  // Aggregate the actual submitted report values into the same
+  // office-wise objects used by the UI. This prevents the dashboard
+  // from showing zeros while the SPM-wise table has real values.
+  Object.keys(officeMap).forEach(function(oid) {
+    const o = officeMap[oid];
+    const officeReports = reports.filter(function(r) {
+      return normalizeId(r.OFFICE_ID) === oid;
+    });
+
+    const totals = {
+      openingKits:0, newKits:0, redirectedKits:0, rtsKits:0,
+      deliveredKits:0, closingPendingKits:0,
+      openingArticles:0, newArticles:0, redirectedArticles:0,
+      rtsArticles:0, deliveredArticles:0, closingPendingArticles:0
+    };
+
+    officeReports.forEach(function(r) {
+      totals.openingKits += num(r.OPENING_KITS);
+      totals.newKits += num(r.NEW_KITS);
+      totals.redirectedKits += num(r.REDIRECTED_KITS);
+      totals.rtsKits += num(r.RTS_KITS);
+      totals.deliveredKits += num(r.DELIVERED_KITS);
+      totals.closingPendingKits += num(r.CLOSING_PENDING_KITS);
+      totals.openingArticles += num(r.OPENING_ARTICLES);
+      totals.newArticles += num(r.NEW_ARTICLES);
+      totals.redirectedArticles += num(r.REDIRECTED_ARTICLES);
+      totals.rtsArticles += num(r.RTS_ARTICLES);
+      totals.deliveredArticles += num(r.DELIVERED_ARTICLES);
+      totals.closingPendingArticles += num(r.CLOSING_PENDING_ARTICLES);
+    });
+
+    Object.assign(o, totals);
   });
 
 
@@ -2542,11 +2580,61 @@ function getAdminDashboard(dateValue, session) {
   });
 
 
+  const articleRows = allArticleRows();
+  const articleStatuses = articleStatusMap(d);
+  const articleSummary = {
+    totalArticles: articleRows.length,
+    updatedArticles: 0,
+    pendingArticles: 0,
+    delivered: 0,
+    redirected: 0,
+    rtsReturn: 0,
+    notReceived: 0,
+    other: 0,
+    masterSynced: 0,
+    masterPendingSync: 0
+  };
+
+  articleRows.forEach(function(article) {
+    const st = statusForArticle(article, articleStatuses);
+    if (!st) {
+      articleSummary.pendingArticles++;
+      return;
+    }
+
+    articleSummary.updatedArticles++;
+    const s = normalizeSearchText(st.STATUS);
+    if (s === 'DELIVERED') articleSummary.delivered++;
+    else if (s === 'REDIRECTED') articleSummary.redirected++;
+    else if (s === 'RTS RETURN' || s === 'RTS') articleSummary.rtsReturn++;
+    else if (s === 'NOT RECEIVED') articleSummary.notReceived++;
+    else articleSummary.other++;
+
+    const master = normalizeSearchText(article.TOOLKIT_DELIVERY_STATUS);
+    const wanted = normalizeSearchText(st.STATUS);
+    if (master === wanted) articleSummary.masterSynced++;
+    else articleSummary.masterPendingSync++;
+  });
+
+  const spmWise = users.map(function(u) {
+    const r = reportMap[normalizeId(u.USER_ID)] || null;
+    const c = r ? reportClient(r) : {};
+    return Object.assign({
+      spmId: normalizeId(u.USER_ID),
+      spmName: String(u.NAME || ''),
+      officeId: normalizeId(u.OFFICE_ID),
+      officeName: String(u.OFFICE_NAME || ''),
+      status: r ? 'Updated' : 'Pending'
+    }, c);
+  });
+
   return ok({
 
     date: d,
 
     summary: summary,
+    articleSummary: articleSummary,
+    spmWise: spmWise,
 
     officeWise:
       Object.keys(officeMap)
@@ -2576,8 +2664,26 @@ function getAdminDashboard(dateValue, session) {
       users.length,
 
     spmsPendingUpdate:
-      pending.length
+      pending.length,
+
+    updatePercentage:
+      users.length ? Math.round((reports.length / users.length) * 10000) / 100 : 0,
+
+    lastSynchronization:
+      latestArticleSyncTimestamp()
   });
+}
+
+
+function latestArticleSyncTimestamp() {
+  const rows = readSheet(S.A).filter(function(r) {
+    return /ARTICLE_MASTER_UPDATE|PUSH_ARTICLE_STATUS_TO_MASTER/.test(String(r.ACTION || ''));
+  });
+  if (!rows.length) return '';
+  rows.sort(function(a, b) {
+    return new Date(b.TIMESTAMP).getTime() - new Date(a.TIMESTAMP).getTime();
+  });
+  return rows[0].TIMESTAMP || '';
 }
 
 
