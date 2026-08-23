@@ -20,29 +20,3 @@ Validation: Closing = Opening + New - Redirected - RTS/Returned - Delivered. Clo
 5. SPMs can update one present status per article per day, with remarks.
 6. Admin/DPS can search and view article-wise status, SPM, office, PIN code and update time.
 7. Redeploy the Apps Script Web App after updating `Code.gs`, then update `API_URL` in `js/config.js` if the deployment URL changes.
-
-
-## v5.1 — Corrected Article Monitoring
-
-This version extends the existing PMV Toolkit Tracker without replacing the existing PMV reporting workflow.
-
-### Article tracking
-- SPM article search covers barcode, PMV application number, artisan name, mobile, address, circle, division, PIN, delivery staff and source status.
-- Search is case/format insensitive and supports multiple search terms.
-- Physical article/barcode rows are retained even when multiple records share a PMV application number.
-- SPM dashboard exposes all available article fields.
-- SPM article status has a status filter and CSV export.
-
-### Admin/DPS
-- Admin/DPS can search and filter the same article fields.
-- Admin/DPS can update `TOOLKIT_DELIVERY_STATUS` directly in the originating article master/source row.
-- Direct master edits and synchronization actions are written to `AUDIT_LOG`.
-- Master sync state is shown as Synced / Pending Sync / Not Updated.
-- Dashboard includes article status totals and SPM update percentage.
-- Office-wise dashboard totals are aggregated from the selected-date SPM reports instead of displaying empty/zero movement fields.
-
-### Compatibility
-Existing endpoints remain available. The new direct master update endpoint is additive:
-`updateArticleMaster`.
-
-Run `setupSpreadsheet()` once after deploying the updated `Code.gs` if the new/legacy sheets need to be created or headers normalized.
