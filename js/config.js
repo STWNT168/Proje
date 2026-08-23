@@ -1,1 +1,1 @@
-window.APP_CONFIG={API_URL:'https://script.google.com/macros/s/AKfycbz99tuShcZP2e4cPYKObZU0SGbckHL6uw68wRfZCwmRO9xAQuPNpinC0LisHvEDWxxC/exec',TIME_ZONE:'Asia/Kolkata'};
+window.APP_CONFIG={API_URL:'https://script.google.com/macros/s/AKfycbxMYcUS96AkPshSgz2i4bxUiqgLqYg2aKCI58CXVkqoiZrIh582aW-FzOvC6ljhgOkV/exec',TIME_ZONE:'Asia/Kolkata'};
