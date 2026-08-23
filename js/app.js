@@ -13,12 +13,12 @@
     if(!s)throw Error('Please sign in again.');
     $('who').textContent=`${s.name||s.userId} · ${s.role}${s.officeName?' · '+s.officeName:''}`;
     show('loginView',false);show('spmView',s.role==='SPM');show('adminView',s.role==='ADMIN'||s.role==='DPS');
-    if(s.role==='SPM'){PMVSpm.setToday();await PMVSpm.load($('spm-date').value)}
-    else{PMVAdmin.setToday();await PMVAdmin.load($('admin-date').value)}
+    if(s.role==='SPM'){PMVSpm.setToday();await PMVSpm.load($('spm-date').value);await PMVArticles.loadSpm()}
+    else{PMVAdmin.setToday();await PMVAdmin.load($('admin-date').value);await PMVArticles.loadAdminArticles()}
   }
   async function boot(){
     $('login').onclick=PMVAuth.login;$('logout').onclick=PMVAuth.logout;
-    PMVSpm.bind();PMVAdmin.bind();
+    PMVSpm.bind();PMVAdmin.bind();PMVArticles.bind();
     window.addEventListener('pmv-session-expired',e=>showLogin(e.detail?.message||'Session expired. Please sign in again.'));
     let s=PMVApi.getSession();
     if(s)try{await afterLogin()}catch(e){showLogin('Your session is no longer valid. Please sign in again.')}
