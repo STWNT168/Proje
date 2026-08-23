@@ -46,8 +46,8 @@
     const scope=$('article-scope');
     if(scope){
       const total=rows.length;
-      scope.textContent += ` · Showing ${view.length} ${currentFilter()} article(s)`;
-      if(!total) scope.textContent += ' · No articles found';
+      scope.textContent=`Office: ${window.__spmArticleMeta?.officeName||''} · Assigned PIN codes: ${(window.__spmArticleMeta?.pincodes||[]).join(', ')||'Not configured'} · ${total} articles visible`;
+      if(!total) scope.textContent+=' · No articles found';
     }
   }
 
@@ -55,6 +55,8 @@
     const st=document.querySelector(`.article-status[data-key="${CSS.escape(key)}"]`);
     const rm=document.querySelector(`.article-remarks[data-key="${CSS.escape(key)}"]`);
     const date=$('spm-date').value;
+
+    if(!st || !rm) return;
 
     try{
       await PMVApi.updateArticleStatus({
@@ -76,12 +78,20 @@
       const q=$('article-search').value.trim();
       const x=await PMVApi.articles(d,q);
 
-      window.__spmArticleRows=x.articles||[];
-
-      $('article-scope').textContent=
-        `Office: ${x.officeName||''} · Assigned PIN codes: ${(x.pincodes||[]).join(', ')||'Not configured'} · ${x.totalVisible||0} articles visible`;
+      window.__spmArticleRows=Array.isArray(x.articles)?x.articles:[];
+      window.__spmArticleMeta={
+        officeName:x.officeName||'',
+        pincodes:Array.isArray(x.pincodes)?x.pincodes:
+                 (Array.isArray(x.assignedPincodes)?x.assignedPincodes:[])
+      };
 
       spmTable(window.__spmArticleRows);
+
+      // If the user searched and nothing matched, give a clear result.
+      if(q && !window.__spmArticleRows.length){
+        $('article-scope').textContent=
+          `No articles found for "${q}".`;
+      }
     }catch(e){
       $('article-scope').textContent=e.message;
       toast(e.message,1);
@@ -159,7 +169,7 @@
           x=await PMVApi.adminArticles(d,q);
 
       $('admin-article-status').textContent=
-        `${x.total||0} records shown · ${x.updatedCount||0} status updates for ${d}.`;
+        `${x.total||x.count||0} records shown · ${x.updatedCount||0} status updates for ${d}.`;
 
       adminTable(x.articles||[]);
     }catch(e){

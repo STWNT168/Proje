@@ -26,5 +26,41 @@
     }
     if(x.data===undefined||x.data===null){return {};} return x.data;
   }
-  window.PMVApi={getSession:sess,saveSession:save,clearSession:clear,todayIndia:today,login:(userId,mobile)=>req('POST','login',{userId,mobile}),logout:()=>req('POST','logout'),opening:d=>req('GET','getPmvOpeningBalance',{date:d}),own:d=>req('GET','getOwnPmvDashboard',{date:d}),admin:d=>req('GET','getAdminPmvDashboard',{date:d}),submit:r=>req('POST','submitPmvReport',{record:r}),articles:(date,q)=>req('GET','getSpmArticles',{date,q:q||'',limit:300}),updateArticleStatus:r=>req('POST','updateArticleStatus',{record:r}),adminArticles:(date,q)=>req('GET','getAdminArticleStatus',{date,q:q||'',limit:500})};
+
+  window.PMVApi={
+    getSession:sess,
+    saveSession:save,
+    clearSession:clear,
+    todayIndia:today,
+    login:(userId,mobile)=>req('POST','login',{userId,mobile}),
+    logout:()=>req('POST','logout'),
+    opening:d=>req('GET','getPmvOpeningBalance',{date:d}),
+    own:d=>req('GET','getOwnPmvDashboard',{date:d}),
+    admin:d=>req('GET','getAdminPmvDashboard',{date:d}),
+    submit:r=>req('POST','submitPmvReport',{record:r}),
+
+    // IMPORTANT: send both "search" and legacy "q" so this works
+    // with the corrected Code.gs and older deployments.
+    articles:(date,q)=>{
+      q=String(q||'').trim();
+      return req('GET','getSpmArticles',{
+        date,
+        search:q,
+        q:q,
+        limit:300
+      });
+    },
+
+    updateArticleStatus:r=>req('POST','updateArticleStatus',{record:r}),
+
+    adminArticles:(date,q)=>{
+      q=String(q||'').trim();
+      return req('GET','getAdminArticleStatus',{
+        date,
+        search:q,
+        q:q,
+        limit:500
+      });
+    }
+  };
 })();
