@@ -1,65 +1,140 @@
-const SPREADSHEET_ID='1vEjY1z-147b38XTWV7vRm_9pjXVMfJmjdQtrKRkkLy8',TZ='Asia/Kolkata';
-const S={U:'USER_MASTER',O:'OFFICE_MASTER',R:'PMV_REPORTS',SS:'SESSIONS',A:'AUDIT_LOG',P:'PINCODE_MASTER',AS:'ARTICLE_STATUS'};
-const ROLE={SPM:'SPM',DPS:'DPS',ADMIN:'ADMIN'};
+const SPREADSHEET_ID = '1vEjY1z-147b38XTWV7vRm_9pjXVMfJmjdQtrKRkkLy8';
+const TZ = 'Asia/Kolkata';
+
+const S = {
+  U: 'USER_MASTER',
+  O: 'OFFICE_MASTER',
+  R: 'PMV_REPORTS',
+  SS: 'SESSIONS',
+  A: 'AUDIT_LOG',
+  P: 'PINCODE_MASTER',
+  AM: 'ARTICLE_MASTER',
+  AS: 'ARTICLE_STATUS'
+};
+
+const ROLE = { SPM: 'SPM', DPS: 'DPS', ADMIN: 'ADMIN' };
+const SESSION_DAYS = 7;
+const MAX_VALUE = 1000000;
 
 /* =========================================================
    SETUP
    ========================================================= */
 
-function setupSpreadsheet(){
-  let ss=SpreadsheetApp.openById(SPREADSHEET_ID),h={
-    USER_MASTER:['USER_ID','NAME','MOBILE','ROLE','OFFICE_ID','OFFICE_NAME','ACTIVE'],
-    OFFICE_MASTER:['OFFICE_ID','OFFICE_NAME','DIVISION','ACTIVE','PINCODES'],
-    PMV_REPORTS:['ID','DATE','OFFICE_ID','OFFICE_NAME','SPM_ID','SPM_NAME','OPENING_KITS','NEW_KITS','REDIRECTED_KITS','RTS_KITS','DELIVERED_KITS','INVALID_MOBILE_KITS','TORN_KITS','DELIVERABLE_KITS','INCOMPLETE_KITS','CLOSING_PENDING_KITS','OPENING_ARTICLES','NEW_ARTICLES','REDIRECTED_ARTICLES','RTS_ARTICLES','DELIVERED_ARTICLES','INVALID_MOBILE_ARTICLES','TORN_ARTICLES','DELIVERABLE_ARTICLES','INCOMPLETE_ARTICLES','CLOSING_PENDING_ARTICLES','SUBMITTED_AT','UPDATED_AT','STATUS'],
-    SESSIONS:['TOKEN','USER_ID','CREATED_AT','EXPIRES_AT','ACTIVE'],
-    AUDIT_LOG:['TIMESTAMP','USER_ID','ACTION','DETAILS'],
-    PINCODE_MASTER:['PINCODE','OFFICE_ID','OFFICE_NAME','ACTIVE'],
-    ARTICLE_MASTER:['BAR_CODE_ID','PMV_APPLICATION_NUMBER','ARTISAN_NAME','MOBILE_NUMBER','ARTISAN_CURRENT_ADDRESS','CIRCLE_NAME','DIVISION_NAME','ARTISAN_PIN_CODE','DELIVERY_STAFF_ASSIGNED_UNASSIGNED','TOOLKIT_DELIVERY_STATUS'],
-    ARTICLE_STATUS:['DATE','ARTICLE_KEY','BAR_CODE_ID','PMV_APPLICATION_NUMBER','OFFICE_ID','OFFICE_NAME','SPM_ID','SPM_NAME','STATUS','REMARKS','UPDATED_AT']
-  };
-  Object.keys(h).forEach(n=>{
-    let sh=ss.getSheetByName(n)||ss.insertSheet(n),need=h[n];
-    if(!sh.getLastRow()) sh.appendRow(need);
-    else{
-      let cur=sh.getRange(1,1,1,Math.max(sh.getLastColumn(),need.length)).getValues()[0];
-      need.forEach((v,i)=>{
-        if(cur[i]!==v&&cur.indexOf(v)<0) sh.getRange(1,i+1).setValue(v);
-      });
-    }
+function setupSpreadsheet() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+  var headers = {};
+  headers[S.U] = ['USER_ID','NAME','MOBILE','ROLE','OFFICE_ID','OFFICE_NAME','ACTIVE'];
+  headers[S.O] = ['OFFICE_ID','OFFICE_NAME','DIVISION','ACTIVE','PINCODES'];
+  headers[S.R] = [
+    'ID','DATE','OFFICE_ID','OFFICE_NAME','SPM_ID','SPM_NAME',
+    'OPENING_KITS','NEW_KITS','REDIRECTED_KITS','RTS_KITS','DELIVERED_KITS',
+    'INVALID_MOBILE_KITS','TORN_KITS','DELIVERABLE_KITS','INCOMPLETE_KITS','CLOSING_PENDING_KITS',
+    'OPENING_ARTICLES','NEW_ARTICLES','REDIRECTED_ARTICLES','RTS_ARTICLES','DELIVERED_ARTICLES',
+    'INVALID_MOBILE_ARTICLES','TORN_ARTICLES','DELIVERABLE_ARTICLES','INCOMPLETE_ARTICLES',
+    'CLOSING_PENDING_ARTICLES','SUBMITTED_AT','UPDATED_AT','STATUS'
+  ];
+  headers[S.SS] = ['TOKEN','USER_ID','CREATED_AT','EXPIRES_AT','ACTIVE'];
+  headers[S.A] = ['TIMESTAMP','USER_ID','ACTION','DETAILS'];
+  headers[S.P] = ['PINCODE','OFFICE_ID','OFFICE_NAME','ACTIVE'];
+  headers[S.AM] = [
+    'BAR_CODE_ID','PMV_APPLICATION_NUMBER','ARTISAN_NAME','MOBILE_NUMBER',
+    'ARTISAN_CURRENT_ADDRESS','CIRCLE_NAME','DIVISION_NAME','ARTISAN_PIN_CODE',
+    'DELIVERY_STAFF_ASSIGNED_UNASSIGNED','TOOLKIT_DELIVERY_STATUS'
+  ];
+  headers[S.AS] = [
+    'DATE','ARTICLE_KEY','BAR_CODE_ID','PMV_APPLICATION_NUMBER','OFFICE_ID',
+    'OFFICE_NAME','SPM_ID','SPM_NAME','STATUS','REMARKS','UPDATED_AT'
+  ];
+
+  Object.keys(headers).forEach(function(name) {
+    var sh = ss.getSheetByName(name) || ss.insertSheet(name);
+    ensureHeaders(sh, headers[name]);
     sh.setFrozenRows(1);
   });
-  return out(1,'Setup complete. Import article data into ARTICLE_MASTER or any compatible article-data sheet. Populate PINCODE_MASTER (PINCODE → OFFICE_ID).');
+
+  return out(ok({
+    spreadsheetId: SPREADSHEET_ID,
+    sheets: Object.keys(headers)
+  }, 'Setup complete. Populate USER_MASTER, OFFICE_MASTER and PINCODE_MASTER, then import article data into ARTICLE_MASTER.'));
+}
+
+function ensureHeaders(sh, required) {
+  if (sh.getLastRow() === 0) {
+    sh.getRange(1, 1, 1, required.length).setValues([required]);
+    return;
+  }
+
+  var lastCol = Math.max(sh.getLastColumn(), required.length);
+  var current = sh.getRange(1, 1, 1, lastCol).getValues()[0];
+
+  required.forEach(function(h, i) {
+    if (String(current[i] || '').trim() !== h) {
+      var existing = current.indexOf(h);
+      if (existing < 0) {
+        sh.getRange(1, i + 1).setValue(h);
+      }
+    }
+  });
 }
 
 /* =========================================================
    API ROUTING
    ========================================================= */
 
-function doGet(e){
-  try{
-    let p=e.parameter||{},s=parse(p.session);
-    if(p.action==='getPmvOpeningBalance') return out(opening(p.date,s));
-    if(p.action==='getOwnPmvDashboard') return out(own(p.date,s));
-    if(p.action==='getAdminPmvDashboard') return out(admin(p.date,s));
-    if(p.action==='getSpmArticles') return out(spmArticles(p,s));
-    if(p.action==='getAdminArticleStatus') return out(adminArticleStatus(p,s));
-    if(p.action==='getArticleSourceDiagnostic') return out(articleSourceDiagnostic(p,s));
+function doGet(e) {
+  try {
+    var p = (e && e.parameter) ? e.parameter : {};
+    var session = parseSession(p.session);
+
+    if (p.action === 'getPmvOpeningBalance') {
+      return out(opening(p.date, session));
+    }
+    if (p.action === 'getOwnPmvDashboard') {
+      return out(own(p.date, session));
+    }
+    if (p.action === 'getAdminPmvDashboard') {
+      return out(admin(p.date, session));
+    }
+    if (p.action === 'getSpmArticles') {
+      return out(spmArticles(p, session));
+    }
+    if (p.action === 'getAdminArticleStatus') {
+      return out(adminArticleStatus(p, session));
+    }
+    if (p.action === 'getArticleSourceDiagnostic') {
+      return out(articleSourceDiagnostic(p, session));
+    }
+
     return out(err('Unknown GET action.'));
-  }catch(x){
-    return out(err(x.message));
+  } catch (ex) {
+    return out(err(errorMessage(ex)));
   }
 }
 
-function doPost(e){
-  try{
-    let b=JSON.parse(e.postData?.contents||'{}');
-    if(b.action==='login') return out(login(b.userId,b.mobile));
-    if(b.action==='logout') return out(logout(parse(b.session)));
-    if(b.action==='submitPmvReport') return out(submit(b.record,parse(b.session)));
-    if(b.action==='updateArticleStatus') return out(updateArticleStatus(b.record,parse(b.session)));
+function doPost(e) {
+  try {
+    var body = {};
+    if (e && e.postData && e.postData.contents) {
+      body = JSON.parse(e.postData.contents);
+    }
+
+    if (body.action === 'login') {
+      return out(login(body.userId, body.mobile));
+    }
+    if (body.action === 'logout') {
+      return out(logout(parseSession(body.session)));
+    }
+    if (body.action === 'submitPmvReport') {
+      return out(submit(body.record, parseSession(body.session)));
+    }
+    if (body.action === 'updateArticleStatus') {
+      return out(updateArticleStatus(body.record, parseSession(body.session)));
+    }
+
     return out(err('Unknown POST action.'));
-  }catch(x){
-    return out(err(x.message));
+  } catch (ex) {
+    return out(err(errorMessage(ex)));
   }
 }
 
@@ -67,280 +142,450 @@ function doPost(e){
    AUTH / LOGIN
    ========================================================= */
 
-function login(id,m){
-  let u=findUser(id);
-  if(!u) return err('User ID not found.');
-  if(!act(u.ACTIVE)) return err('This account is inactive.');
-  if(mob(u.MOBILE)!==mob(m)) return err('Registered mobile number does not match.');
-  let role=String(u.ROLE||'').toUpperCase();
-  if(![ROLE.SPM,ROLE.DPS,ROLE.ADMIN].includes(role)) return err('Invalid user role.');
-  let t=Utilities.getUuid(),now=new Date(),ex=new Date(now.getTime()+604800000);
-  sheet(S.SS).appendRow([t,String(u.USER_ID),now,ex,true]);
-  audit(u.USER_ID,'LOGIN','Successful login');
+function login(id, mobile) {
+  var user = findUser(id);
+  if (!user) return err('User ID not found.');
+  if (!activeValue(user.ACTIVE)) return err('This account is inactive.');
+  if (mobileNorm(user.MOBILE) !== mobileNorm(mobile)) {
+    return err('Registered mobile number does not match.');
+  }
+
+  var role = String(user.ROLE || '').trim().toUpperCase();
+  if ([ROLE.SPM, ROLE.DPS, ROLE.ADMIN].indexOf(role) < 0) {
+    return err('Invalid user role.');
+  }
+
+  var token = Utilities.getUuid();
+  var now = new Date();
+  var expires = new Date(now.getTime() + SESSION_DAYS * 24 * 60 * 60 * 1000);
+
+  sheet(S.SS).appendRow([
+    token, String(user.USER_ID), now, expires, true
+  ]);
+
+  audit(user.USER_ID, 'LOGIN', 'Successful login');
+
   return ok({
-    userId:String(u.USER_ID),
-    name:String(u.NAME||''),
-    role,
-    officeId:String(u.OFFICE_ID||''),
-    officeName:String(u.OFFICE_NAME||''),
-    token:t,
-    expiresAt:ex.toISOString()
+    userId: String(user.USER_ID),
+    name: String(user.NAME || ''),
+    role: role,
+    officeId: String(user.OFFICE_ID || ''),
+    officeName: String(user.OFFICE_NAME || ''),
+    token: token,
+    expiresAt: expires.toISOString()
   });
 }
 
-function logout(s){
-  if(!s) return ok(null,'Logged out.');
-  read(S.SS).forEach(r=>{
-    if(String(r.TOKEN)===String(s.token))
-      sheet(S.SS).getRange(r.__row,5).setValue(false);
+function logout(session) {
+  if (!session || !session.token) return ok(null, 'Logged out.');
+
+  var rows = read(S.SS);
+  rows.forEach(function(r) {
+    if (String(r.TOKEN) === String(session.token)) {
+      sheet(S.SS).getRange(r.__row, 5).setValue(false);
+    }
   });
-  return ok(null,'Logged out.');
+
+  return ok(null, 'Logged out.');
+}
+
+function auth(session) {
+  if (!session || !session.token) {
+    throw new Error('Session required.');
+  }
+
+  var rows = read(S.SS);
+  var found = null;
+
+  rows.forEach(function(r) {
+    if (String(r.TOKEN) === String(session.token) && activeValue(r.ACTIVE)) {
+      found = r;
+    }
+  });
+
+  if (!found) throw new Error('Invalid or inactive session.');
+
+  var expires = new Date(found.EXPIRES_AT);
+  if (isNaN(expires.getTime()) || expires.getTime() < Date.now()) {
+    sheet(S.SS).getRange(found.__row, 5).setValue(false);
+    throw new Error('Session expired. Please login again.');
+  }
+
+  var user = findUser(found.USER_ID);
+  if (!user || !activeValue(user.ACTIVE)) {
+    throw new Error('User account is inactive or missing.');
+  }
+
+  return {
+    user: user,
+    role: String(user.ROLE || '').toUpperCase(),
+    token: String(found.TOKEN)
+  };
 }
 
 /* =========================================================
    PMV REPORT
    ========================================================= */
 
-function submit(x,s){
-  let a=auth(s);
-  if(a.role!==ROLE.SPM) throw Error('Only SPM users can submit daily reports.');
-  let r=norm(x),oid=String(a.user.OFFICE_ID||'');
-  r.ok=prev(oid,r.date,'K');
-  r.oa=prev(oid,r.date,'A');
-  r.ck=r.ok+r.nk-r.rk-r.rt-r.dk;
-  r.ca=r.oa+r.na-r.ra-r.rta-r.da;
-  let pk=r.ik+r.tk+r.delk+r.incK,pa=r.ia+r.ta+r.dela+r.incA;
-  if(r.ck<0||r.ca<0) throw Error('Movement exceeds available stock.');
-  if(r.ck!==pk) throw Error('Kit validation failed: Opening + New - Redirected - RTS - Delivered must equal Invalid Mobile + Torn/Without Proper Details + Deliverable + Incomplete.');
-  if(r.ca!==pa) throw Error('Article validation failed: Opening + New - Redirected - RTS - Delivered must equal Invalid Mobile + Torn/Without Proper Details + Deliverable + Incomplete.');
-  let row=[r.id,r.date,oid,String(a.user.OFFICE_NAME||''),String(a.user.USER_ID),String(a.user.NAME||''),r.ok,r.nk,r.rk,r.rt,r.dk,r.ik,r.tk,r.delk,r.incK,r.ck,r.oa,r.na,r.ra,r.rta,r.da,r.ia,r.ta,r.dela,r.incA,r.ca,new Date(),new Date(),'FINAL'];
-  let old=findReport(a.user.USER_ID,r.date);
-  if(old) sheet(S.R).getRange(old.__row,1,1,row.length).setValues([row]);
-  else sheet(S.R).appendRow(row);
-  audit(a.user.USER_ID,'SUBMIT',r.date);
-  return ok({closingPendingKits:r.ck,closingPendingArticles:r.ca},'Report saved successfully.');
+function submit(x, session) {
+  var a = auth(session);
+  if (a.role !== ROLE.SPM) {
+    throw new Error('Only SPM users can submit daily reports.');
+  }
+
+  var r = norm(x);
+  var officeId = String(a.user.OFFICE_ID || '').trim();
+
+  if (!officeId) throw new Error('SPM office is not configured.');
+
+  r.openingKits = previousBalance(officeId, r.date, 'K');
+  r.openingArticles = previousBalance(officeId, r.date, 'A');
+
+  r.closingKits = r.openingKits + r.newKits - r.redirectedKits - r.rtsKits - r.deliveredKits;
+  r.closingArticles = r.openingArticles + r.newArticles - r.redirectedArticles - r.rtsArticles - r.deliveredArticles;
+
+  var kitBreakdown = r.invalidMobileKits + r.tornKits + r.deliverableKits + r.incompleteKits;
+  var articleBreakdown = r.invalidMobileArticles + r.tornArticles + r.deliverableArticles + r.incompleteArticles;
+
+  if (r.closingKits < 0 || r.closingArticles < 0) {
+    throw new Error('Movement exceeds available stock.');
+  }
+
+  if (r.closingKits !== kitBreakdown) {
+    throw new Error('Kit validation failed: Opening + New - Redirected - RTS - Delivered must equal Invalid Mobile + Torn + Deliverable + Incomplete.');
+  }
+
+  if (r.closingArticles !== articleBreakdown) {
+    throw new Error('Article validation failed: Opening + New - Redirected - RTS - Delivered must equal Invalid Mobile + Torn + Deliverable + Incomplete.');
+  }
+
+  var row = [
+    r.id, r.date, officeId, String(a.user.OFFICE_NAME || ''),
+    String(a.user.USER_ID), String(a.user.NAME || ''),
+    r.openingKits, r.newKits, r.redirectedKits, r.rtsKits, r.deliveredKits,
+    r.invalidMobileKits, r.tornKits, r.deliverableKits, r.incompleteKits, r.closingKits,
+    r.openingArticles, r.newArticles, r.redirectedArticles, r.rtsArticles, r.deliveredArticles,
+    r.invalidMobileArticles, r.tornArticles, r.deliverableArticles, r.incompleteArticles, r.closingArticles,
+    new Date(), new Date(), 'FINAL'
+  ];
+
+  var old = findReport(a.user.USER_ID, r.date);
+  if (old) {
+    sheet(S.R).getRange(old.__row, 1, 1, row.length).setValues([row]);
+  } else {
+    sheet(S.R).appendRow(row);
+  }
+
+  audit(a.user.USER_ID, 'SUBMIT', r.date);
+
+  return ok({
+    closingPendingKits: r.closingKits,
+    closingPendingArticles: r.closingArticles
+  }, 'Report saved successfully.');
 }
 
-function opening(d,s){
-  let a=auth(s);
-  if(a.role!==ROLE.SPM) throw Error('Only SPM users can access opening balance.');
-  d=String(d||today());
-  return ok({openingKits:prev(a.user.OFFICE_ID,d,'K'),openingArticles:prev(a.user.OFFICE_ID,d,'A')});
+function opening(d, session) {
+  var a = auth(session);
+  if (a.role !== ROLE.SPM) {
+    throw new Error('Only SPM users can access opening balance.');
+  }
+
+  d = String(d || today());
+  validateDate(d);
+
+  return ok({
+    openingKits: previousBalance(a.user.OFFICE_ID, d, 'K'),
+    openingArticles: previousBalance(a.user.OFFICE_ID, d, 'A')
+  });
 }
 
-function own(d,s){
-  let a=auth(s);
-  if(a.role!==ROLE.SPM) throw Error('Only SPM users can access own report.');
-  let r=findReport(a.user.USER_ID,String(d||today()));
-  return ok(r?client(r):emptyClient(String(d||today())));
+function own(d, session) {
+  var a = auth(session);
+  if (a.role !== ROLE.SPM) {
+    throw new Error('Only SPM users can access own report.');
+  }
+
+  d = String(d || today());
+  validateDate(d);
+
+  var r = findReport(a.user.USER_ID, d);
+  return ok(r ? client(r) : emptyClient(d));
 }
 
-function admin(d,s){
-  let a=auth(s);
-  if(![ROLE.ADMIN,ROLE.DPS].includes(a.role)) throw Error('Only DPS/Admin users can access the consolidated dashboard.');
-  d=String(d||today());
-  let us=read(S.U).filter(u=>act(u.ACTIVE)&&String(u.ROLE).toUpperCase()===ROLE.SPM),
-      rs=read(S.R).filter(r=>date(r.DATE)===d),
-      by={};
-  rs.forEach(r=>by[String(r.SPM_ID)]=r);
-  let os={};
-  read(S.O).filter(o=>act(o.ACTIVE)).forEach(o=>os[o.OFFICE_ID]=bo(o));
-  let pending=[],spmWise=[];
-  us.forEach(u=>{
-    let oid=String(u.OFFICE_ID||''),o=os[oid]||(os[oid]=bo(u)),r=by[String(u.USER_ID)];
+function admin(d, session) {
+  var a = auth(session);
+  if ([ROLE.ADMIN, ROLE.DPS].indexOf(a.role) < 0) {
+    throw new Error('Only DPS/Admin users can access the consolidated dashboard.');
+  }
+
+  d = String(d || today());
+  validateDate(d);
+
+  var users = read(S.U).filter(function(u) {
+    return activeValue(u.ACTIVE) &&
+      String(u.ROLE || '').trim().toUpperCase() === ROLE.SPM;
+  });
+
+  var reports = read(S.R).filter(function(r) {
+    return dateOnly(r.DATE) === d;
+  });
+
+  var bySpm = {};
+  reports.forEach(function(r) {
+    bySpm[String(r.SPM_ID)] = r;
+  });
+
+  var offices = {};
+  read(S.O).filter(function(o) {
+    return activeValue(o.ACTIVE);
+  }).forEach(function(o) {
+    offices[String(o.OFFICE_ID)] = officeBase(o);
+  });
+
+  var pending = [];
+  var spmWise = [];
+
+  users.forEach(function(u) {
+    var oid = String(u.OFFICE_ID || '');
+    var o = offices[oid] || (offices[oid] = officeBase(u));
+    var r = bySpm[String(u.USER_ID)];
+
     o.totalSpms++;
-    if(r){
+
+    if (r) {
       o.updatedSpms++;
-      spmWise.push({...client(r),spmId:String(u.USER_ID||''),spmName:String(u.NAME||''),officeId:oid,officeName:String(o.officeName||u.OFFICE_NAME||''),status:'Updated'});
-    }else{
-      pending.push({spmName:String(u.NAME||''),spmId:String(u.USER_ID),officeName:o.officeName});
+
+      var c = client(r);
+      c.spmId = String(u.USER_ID || '');
+      c.spmName = String(u.NAME || '');
+      c.officeId = oid;
+      c.officeName = String(o.officeName || u.OFFICE_NAME || '');
+      c.status = 'Updated';
+      spmWise.push(c);
+    } else {
       o.pendingSpms++;
-      spmWise.push({
-        date:d,spmId:String(u.USER_ID||''),spmName:String(u.NAME||''),officeId:oid,
-        officeName:String(o.officeName||u.OFFICE_NAME||''),status:'Not Updated',
-        openingKits:0,openingArticles:0,newKits:0,newArticles:0,redirectedKits:0,redirectedArticles:0,
-        rtsKits:0,rtsArticles:0,deliveredKits:0,deliveredArticles:0,invalidMobileKits:0,
-        invalidMobileArticles:0,tornKits:0,tornArticles:0,deliverableKits:0,deliverableArticles:0,
-        incompleteKits:0,incompleteArticles:0,closingPendingKits:0,closingPendingArticles:0
+
+      pending.push({
+        spmName: String(u.NAME || ''),
+        spmId: String(u.USER_ID || ''),
+        officeName: String(o.officeName || u.OFFICE_NAME || '')
       });
+
+      var empty = emptyClient(d);
+      empty.spmId = String(u.USER_ID || '');
+      empty.spmName = String(u.NAME || '');
+      empty.officeId = oid;
+      empty.officeName = String(o.officeName || u.OFFICE_NAME || '');
+      empty.status = 'Not Updated';
+      spmWise.push(empty);
     }
   });
-  let z={
-    newKits:0,newArticles:0,redirectedKits:0,redirectedArticles:0,rtsKits:0,rtsArticles:0,
-    deliveredKitsToday:0,deliveredArticlesToday:0,closingPendingKits:0,closingPendingArticles:0,
-    invalidMobileKits:0,invalidMobileArticles:0,tornKits:0,tornArticles:0,
-    deliverableKits:0,deliverableArticles:0,incompleteKits:0,incompleteArticles:0
+
+  var summary = {
+    newKits: 0, newArticles: 0,
+    redirectedKits: 0, redirectedArticles: 0,
+    rtsKits: 0, rtsArticles: 0,
+    deliveredKitsToday: 0, deliveredArticlesToday: 0,
+    closingPendingKits: 0, closingPendingArticles: 0,
+    invalidMobileKits: 0, invalidMobileArticles: 0,
+    tornKits: 0, tornArticles: 0,
+    deliverableKits: 0, deliverableArticles: 0,
+    incompleteKits: 0, incompleteArticles: 0
   };
-  rs.forEach(r=>{
-    z.newKits+=num(r.NEW_KITS); z.newArticles+=num(r.NEW_ARTICLES);
-    z.redirectedKits+=num(r.REDIRECTED_KITS); z.redirectedArticles+=num(r.REDIRECTED_ARTICLES);
-    z.rtsKits+=num(r.RTS_KITS); z.rtsArticles+=num(r.RTS_ARTICLES);
-    z.deliveredKitsToday+=num(r.DELIVERED_KITS); z.deliveredArticlesToday+=num(r.DELIVERED_ARTICLES);
-    z.closingPendingKits+=num(r.CLOSING_PENDING_KITS); z.closingPendingArticles+=num(r.CLOSING_PENDING_ARTICLES);
-    z.invalidMobileKits+=num(r.INVALID_MOBILE_KITS); z.invalidMobileArticles+=num(r.INVALID_MOBILE_ARTICLES);
-    z.incompleteKits+=num(r.INCOMPLETE_KITS); z.incompleteArticles+=num(r.INCOMPLETE_ARTICLES);
-    z.tornKits+=num(r.TORN_KITS); z.tornArticles+=num(r.TORN_ARTICLES);
-    z.deliverableKits+=num(r.DELIVERABLE_KITS); z.deliverableArticles+=num(r.DELIVERABLE_ARTICLES);
-    let o=os[r.OFFICE_ID]||(os[r.OFFICE_ID]=bo(r));
-    ['OPENING_KITS','NEW_KITS','REDIRECTED_KITS','RTS_KITS','DELIVERED_KITS','CLOSING_PENDING_KITS'].forEach(k=>o[key(k,'K')]+=num(r[k]));
-    ['OPENING_ARTICLES','NEW_ARTICLES','REDIRECTED_ARTICLES','RTS_ARTICLES','DELIVERED_ARTICLES','CLOSING_PENDING_ARTICLES'].forEach(k=>o[key(k,'A')]+=num(r[k]));
+
+  reports.forEach(function(r) {
+    summary.newKits += num(r.NEW_KITS);
+    summary.newArticles += num(r.NEW_ARTICLES);
+    summary.redirectedKits += num(r.REDIRECTED_KITS);
+    summary.redirectedArticles += num(r.REDIRECTED_ARTICLES);
+    summary.rtsKits += num(r.RTS_KITS);
+    summary.rtsArticles += num(r.RTS_ARTICLES);
+    summary.deliveredKitsToday += num(r.DELIVERED_KITS);
+    summary.deliveredArticlesToday += num(r.DELIVERED_ARTICLES);
+    summary.closingPendingKits += num(r.CLOSING_PENDING_KITS);
+    summary.closingPendingArticles += num(r.CLOSING_PENDING_ARTICLES);
+    summary.invalidMobileKits += num(r.INVALID_MOBILE_KITS);
+    summary.invalidMobileArticles += num(r.INVALID_MOBILE_ARTICLES);
+    summary.tornKits += num(r.TORN_KITS);
+    summary.tornArticles += num(r.TORN_ARTICLES);
+    summary.deliverableKits += num(r.DELIVERABLE_KITS);
+    summary.deliverableArticles += num(r.DELIVERABLE_ARTICLES);
+    summary.incompleteKits += num(r.INCOMPLETE_KITS);
+    summary.incompleteArticles += num(r.INCOMPLETE_ARTICLES);
+
+    var o = offices[String(r.OFFICE_ID)] || (offices[String(r.OFFICE_ID)] = officeBase(r));
+
+    o.openingKits += num(r.OPENING_KITS);
+    o.newKits += num(r.NEW_KITS);
+    o.redirectedKits += num(r.REDIRECTED_KITS);
+    o.rtsKits += num(r.RTS_KITS);
+    o.deliveredKits += num(r.DELIVERED_KITS);
+    o.closingPendingKits += num(r.CLOSING_PENDING_KITS);
+
+    o.openingArticles += num(r.OPENING_ARTICLES);
+    o.newArticles += num(r.NEW_ARTICLES);
+    o.redirectedArticles += num(r.REDIRECTED_ARTICLES);
+    o.rtsArticles += num(r.RTS_ARTICLES);
+    o.deliveredArticles += num(r.DELIVERED_ARTICLES);
+    o.closingPendingArticles += num(r.CLOSING_PENDING_ARTICLES);
   });
+
+  var officeWise = Object.keys(offices).map(function(k) {
+    var o = offices[k];
+    o.status = o.totalSpms > 0 && o.updatedSpms === o.totalSpms ? 'Updated' : 'Pending';
+    return o;
+  });
+
   return ok({
-    date:d,summary:z,
-    officeWise:Object.values(os).map(o=>({...o,status:o.totalSpms&&o.updatedSpms===o.totalSpms?'Updated':'Pending'})),
-    spmWise,pendingSpms:pending,spmsUpdatedToday:rs.length,activeSpms:us.length,spmsPendingUpdate:pending.length
+    date: d,
+    summary: summary,
+    officeWise: officeWise,
+    spmWise: spmWise,
+    pendingSpms: pending,
+    spmsUpdatedToday: reports.length,
+    activeSpms: users.length,
+    spmsPendingUpdate: pending.length
   });
-}
-
-function key(k,t){
-  return ({
-    OPENING_KITS:'openingKits',NEW_KITS:'newKits',REDIRECTED_KITS:'redirectedKits',
-    RTS_KITS:'rtsKits',DELIVERED_KITS:'deliveredKits',CLOSING_PENDING_KITS:'closingPendingKits',
-    OPENING_ARTICLES:'openingArticles',NEW_ARTICLES:'newArticles',REDIRECTED_ARTICLES:'redirectedArticles',
-    RTS_ARTICLES:'rtsArticles',DELIVERED_ARTICLES:'deliveredArticles',CLOSING_PENDING_ARTICLES:'closingPendingArticles'
-  })[k];
-}
-
-function prev(oid,d,t){
-  let q=read(S.R).filter(r=>String(r.OFFICE_ID)===String(oid)&&date(r.DATE)<d).sort((a,b)=>date(b.DATE).localeCompare(date(a.DATE)));
-  return q.length?(t==='K'?num(q[0].CLOSING_PENDING_KITS):num(q[0].CLOSING_PENDING_ARTICLES)):0;
-}
-
-function norm(x){
-  let r={id:x?.id||Utilities.getUuid(),date:String(x?.date||today())};
-  let map={
-    newKits:'nk',newArticles:'na',redirectedKits:'rk',redirectedArticles:'ra',
-    rtsKits:'rt',rtsArticles:'rta',deliveredKits:'dk',deliveredArticles:'da',
-    invalidMobileKits:'ik',invalidMobileArticles:'ia',tornKits:'tk',tornArticles:'ta',
-    deliverableKits:'delk',deliverableArticles:'dela',incompleteKits:'incK',incompleteArticles:'incA'
-  };
-  Object.keys(map).forEach(k=>r[map[k]]=Math.max(0,Math.floor(num(x?.[k]))));
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(r.date)) throw Error('Invalid report date.');
-  return r;
-}
-
-function emptyClient(d){
-  return {
-    date:d,openingKits:0,openingArticles:0,newKits:0,newArticles:0,redirectedKits:0,redirectedArticles:0,
-    rtsKits:0,rtsArticles:0,deliveredKits:0,deliveredArticles:0,invalidMobileKits:0,invalidMobileArticles:0,
-    tornKits:0,tornArticles:0,deliverableKits:0,deliverableArticles:0,incompleteKits:0,incompleteArticles:0,
-    closingPendingKits:0,closingPendingArticles:0
-  };
-}
-
-function client(r){
-  return {
-    date:date(r.DATE),openingKits:num(r.OPENING_KITS),openingArticles:num(r.OPENING_ARTICLES),
-    newKits:num(r.NEW_KITS),newArticles:num(r.NEW_ARTICLES),redirectedKits:num(r.REDIRECTED_KITS),
-    redirectedArticles:num(r.REDIRECTED_ARTICLES),rtsKits:num(r.RTS_KITS),rtsArticles:num(r.RTS_ARTICLES),
-    deliveredKits:num(r.DELIVERED_KITS),deliveredArticles:num(r.DELIVERED_ARTICLES),
-    invalidMobileKits:num(r.INVALID_MOBILE_KITS),invalidMobileArticles:num(r.INVALID_MOBILE_ARTICLES),
-    tornKits:num(r.TORN_KITS),tornArticles:num(r.TORN_ARTICLES),deliverableKits:num(r.DELIVERABLE_KITS),
-    deliverableArticles:num(r.DELIVERABLE_ARTICLES),incompleteKits:num(r.INCOMPLETE_KITS),
-    incompleteArticles:num(r.INCOMPLETE_ARTICLES),closingPendingKits:num(r.CLOSING_PENDING_KITS),
-    closingPendingArticles:num(r.CLOSING_PENDING_ARTICLES)
-  };
-}
-
-function bo(x){
-  return {
-    officeId:String(x.OFFICE_ID||''),officeName:String(x.OFFICE_NAME||''),totalSpms:0,updatedSpms:0,pendingSpms:0,
-    openingKits:0,newKits:0,redirectedKits:0,rtsKits:0,deliveredKits:0,closingPendingKits:0,
-    openingArticles:0,newArticles:0,redirectedArticles:0,rtsArticles:0,deliveredArticles:0,closingPendingArticles:0
-  };
 }
 
 /* =========================================================
-   ARTICLE ENGINE - AUTO DISCOVERY / DUAL SOURCE
+   ARTICLE ENGINE
    ========================================================= */
 
-function normalizePin(v){
-  return String(v==null?'':v).replace(/\D/g,'').trim();
+var ARTICLE_HEADER_ALIASES = {
+  BAR_CODE_ID: [
+    'BAR_CODE_ID','BARCODE_ID','BARCODE','BAR_CODE',
+    'ARTICLE_BARCODE','ARTICLE_BAR_CODE','BAR_CODE_NO'
+  ],
+  PMV_APPLICATION_NUMBER: [
+    'PMV_APPLICATION_NUMBER','PMV_APPLICATION_NO','PMV_APP_NUMBER',
+    'PMV_APPLICATION','APPLICATION_NUMBER','PMV_NO','PMV_NUMBER'
+  ],
+  ARTISAN_NAME: [
+    'ARTISAN_NAME','ARTISAN','NAME_OF_ARTISAN','BENEFICIARY_NAME'
+  ],
+  MOBILE_NUMBER: [
+    'MOBILE_NUMBER','MOBILE','MOBILE_NO','PHONE','PHONE_NUMBER'
+  ],
+  ARTISAN_CURRENT_ADDRESS: [
+    'ARTISAN_CURRENT_ADDRESS','CURRENT_ADDRESS','ADDRESS','ARTISAN_ADDRESS'
+  ],
+  CIRCLE_NAME: ['CIRCLE_NAME','CIRCLE'],
+  DIVISION_NAME: ['DIVISION_NAME','DIVISION'],
+  ARTISAN_PIN_CODE: [
+    'ARTISAN_PIN_CODE','ARTISAN_PINCODE','PIN_CODE','PINCODE','PIN','ARTISAN_PIN'
+  ],
+  DELIVERY_STAFF_ASSIGNED_UNASSIGNED: [
+    'DELIVERY_STAFF_ASSIGNED_UNASSIGNED','DELIVERY_STAFF',
+    'DELIVERY_STAFF_ASSIGNED','DELIVERY_STAFF_STATUS'
+  ],
+  TOOLKIT_DELIVERY_STATUS: [
+    'TOOLKIT_DELIVERY_STATUS','DELIVERY_STATUS','STATUS','PRESENT_STATUS'
+  ]
+};
+
+function normalizeHeader(v) {
+  return String(v == null ? '' : v)
+    .trim()
+    .toUpperCase()
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
 }
 
-function articleKey(r){
-  return String(r.PMV_APPLICATION_NUMBER||r.BAR_CODE_ID||'').trim();
+function normalizePin(v) {
+  var s = String(v == null ? '' : v).trim();
+  if (/^\d+\.0$/.test(s)) s = s.replace(/\.0$/, '');
+  return s.replace(/\D/g, '');
 }
 
-function normalizeHeader(v){
-  return String(v==null?'':v).trim().toUpperCase().replace(/\s+/g,'_');
+function articleKey(r) {
+  var pmv = String(r.PMV_APPLICATION_NUMBER || '').trim();
+  var barcode = String(r.BAR_CODE_ID || '').trim();
+  return pmv || barcode;
 }
 
-/*
- * Reads a sheet without requiring exact column order.
- */
-function articleReadSheet(name){
-  let sh=SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(name);
-  if(!sh||sh.getLastRow()<2) return [];
-  let values=sh.getDataRange().getValues();
-  let headers=values.shift().map(normalizeHeader);
-  return values.map((row,i)=>{
-    let o={__row:i+2,__sheet:name};
-    headers.forEach((h,j)=>{if(h)o[h]=row[j];});
-    return o;
+function articleReadSheet(name) {
+  var sh = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(name);
+  if (!sh || sh.getLastRow() < 2 || sh.getLastColumn() < 1) return [];
+
+  var values = sh.getDataRange().getDisplayValues();
+  if (!values.length) return [];
+
+  var headers = values.shift().map(normalizeHeader);
+
+  return values.map(function(row, index) {
+    var obj = { __row: index + 2, __sheet: name };
+    headers.forEach(function(h, j) {
+      if (h) obj[h] = row[j];
+    });
+    return obj;
   });
 }
 
-/*
- * Header aliases. This is the key fix for imported CSVs whose
- * headers differ slightly from ARTICLE_MASTER.
- */
-const ARTICLE_HEADER_ALIASES={
-  BAR_CODE_ID:['BAR_CODE_ID','BARCODE_ID','BARCODE','BAR_CODE','ARTICLE_BARCODE','ARTICLE_BAR_CODE','BAR_CODE_NO'],
-  PMV_APPLICATION_NUMBER:['PMV_APPLICATION_NUMBER','PMV_APPLICATION_NO','PMV_APP_NUMBER','PMV_APPLICATION','APPLICATION_NUMBER','PMV_NO','PMV_NUMBER'],
-  ARTISAN_NAME:['ARTISAN_NAME','ARTISAN','NAME_OF_ARTISAN','BENEFICIARY_NAME'],
-  MOBILE_NUMBER:['MOBILE_NUMBER','MOBILE','MOBILE_NO','PHONE','PHONE_NUMBER'],
-  ARTISAN_CURRENT_ADDRESS:['ARTISAN_CURRENT_ADDRESS','CURRENT_ADDRESS','ADDRESS','ARTISAN_ADDRESS'],
-  CIRCLE_NAME:['CIRCLE_NAME','CIRCLE'],
-  DIVISION_NAME:['DIVISION_NAME','DIVISION'],
-  ARTISAN_PIN_CODE:['ARTISAN_PIN_CODE','ARTISAN_PINCODE','PIN_CODE','PINCODE','PIN','ARTISAN_PIN'],
-  DELIVERY_STAFF_ASSIGNED_UNASSIGNED:['DELIVERY_STAFF_ASSIGNED_UNASSIGNED','DELIVERY_STAFF','DELIVERY_STAFF_ASSIGNED','DELIVERY_STAFF_STATUS'],
-  TOOLKIT_DELIVERY_STATUS:['TOOLKIT_DELIVERY_STATUS','DELIVERY_STATUS','STATUS','PRESENT_STATUS']
-};
+function getAliasValue(row, canonical) {
+  var aliases = ARTICLE_HEADER_ALIASES[canonical] || [canonical];
 
-function getAliasValue(row,canonical){
-  let aliases=ARTICLE_HEADER_ALIASES[canonical]||[canonical];
-  for(let i=0;i<aliases.length;i++){
-    let v=row[aliases[i]];
-    if(v!==undefined&&v!==null&&String(v).trim()!=='') return v;
+  for (var i = 0; i < aliases.length; i++) {
+    var v = row[normalizeHeader(aliases[i])];
+    if (v !== undefined && v !== null && String(v).trim() !== '') {
+      return v;
+    }
   }
+
   return '';
 }
 
-function canonicalArticleRow(row){
-  let o={
-    __row:row.__row,
-    __sheet:row.__sheet,
-    BAR_CODE_ID:getAliasValue(row,'BAR_CODE_ID'),
-    PMV_APPLICATION_NUMBER:getAliasValue(row,'PMV_APPLICATION_NUMBER'),
-    ARTISAN_NAME:getAliasValue(row,'ARTISAN_NAME'),
-    MOBILE_NUMBER:getAliasValue(row,'MOBILE_NUMBER'),
-    ARTISAN_CURRENT_ADDRESS:getAliasValue(row,'ARTISAN_CURRENT_ADDRESS'),
-    CIRCLE_NAME:getAliasValue(row,'CIRCLE_NAME'),
-    DIVISION_NAME:getAliasValue(row,'DIVISION_NAME'),
-    ARTISAN_PIN_CODE:getAliasValue(row,'ARTISAN_PIN_CODE'),
-    DELIVERY_STAFF_ASSIGNED_UNASSIGNED:getAliasValue(row,'DELIVERY_STAFF_ASSIGNED_UNASSIGNED'),
-    TOOLKIT_DELIVERY_STATUS:getAliasValue(row,'TOOLKIT_DELIVERY_STATUS')
+function canonicalArticleRow(row) {
+  var o = {
+    __row: row.__row,
+    __sheet: row.__sheet,
+    BAR_CODE_ID: getAliasValue(row, 'BAR_CODE_ID'),
+    PMV_APPLICATION_NUMBER: getAliasValue(row, 'PMV_APPLICATION_NUMBER'),
+    ARTISAN_NAME: getAliasValue(row, 'ARTISAN_NAME'),
+    MOBILE_NUMBER: getAliasValue(row, 'MOBILE_NUMBER'),
+    ARTISAN_CURRENT_ADDRESS: getAliasValue(row, 'ARTISAN_CURRENT_ADDRESS'),
+    CIRCLE_NAME: getAliasValue(row, 'CIRCLE_NAME'),
+    DIVISION_NAME: getAliasValue(row, 'DIVISION_NAME'),
+    ARTISAN_PIN_CODE: getAliasValue(row, 'ARTISAN_PIN_CODE'),
+    DELIVERY_STAFF_ASSIGNED_UNASSIGNED: getAliasValue(row, 'DELIVERY_STAFF_ASSIGNED_UNASSIGNED'),
+    TOOLKIT_DELIVERY_STATUS: getAliasValue(row, 'TOOLKIT_DELIVERY_STATUS')
   };
-  o.__articleKey=articleKey(o);
+
+  o.__articleKey = articleKey(o);
   return o;
 }
 
-function isArticleDataSheet(name){
-  let rows=articleReadSheet(name);
-  if(!rows.length) return false;
-  let sample=rows.slice(0,Math.min(rows.length,10));
-  let hasKey=sample.some(r=>String(getAliasValue(r,'BAR_CODE_ID')||getAliasValue(r,'PMV_APPLICATION_NUMBER')).trim()!=='');
-  let hasPin=sample.some(r=>normalizePin(getAliasValue(r,'ARTISAN_PIN_CODE'))!=='');
-  return hasKey&&hasPin;
+function isArticleDataSheet(name) {
+  var rows = articleReadSheet(name);
+  if (!rows.length) return false;
+
+  var sample = rows.slice(0, Math.min(rows.length, 20));
+  var hasKey = sample.some(function(r) {
+    return String(
+      getAliasValue(r, 'BAR_CODE_ID') ||
+      getAliasValue(r, 'PMV_APPLICATION_NUMBER')
+    ).trim() !== '';
+  });
+
+  var hasPin = sample.some(function(r) {
+    return normalizePin(getAliasValue(r, 'ARTISAN_PIN_CODE')) !== '';
+  });
+
+  return hasKey && hasPin;
 }
 
-function articleSourceSheetNames(){
-  let ss=SpreadsheetApp.openById(SPREADSHEET_ID);
-  let names=ss.getSheets().map(sh=>sh.getName());
+function articleSourceSheetNames() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var names = ss.getSheets().map(function(sh) { return sh.getName(); });
 
-  let preferred=[
-    'ARTICLE_MASTER',
+  var excluded = [
+    S.U,S.O,S.R,S.SS,S.A,S.P,S.AS,
+    'SESSIONS','AUDIT_LOG','PMV_REPORTS','OFFICE_MASTER','USER_MASTER','PINCODE_MASTER'
+  ];
+
+  var preferred = [
+    S.AM,
     'ARTICLE_MASTER_IMPORT',
     'ARTICLES',
     'ARTICLE_DATA',
@@ -348,264 +593,342 @@ function articleSourceSheetNames(){
     'PMV_ARTICLES'
   ];
 
-  let ordered=[];
-  preferred.forEach(n=>{if(names.includes(n)&&!ordered.includes(n))ordered.push(n);});
+  var ordered = [];
 
-  names.forEach(n=>{
-    if(ordered.includes(n)) return;
-    if([S.U,S.O,S.R,S.SS,S.A,S.P,S.AS].includes(n)) return;
-    try{
-      if(isArticleDataSheet(n)) ordered.push(n);
-    }catch(e){}
+  preferred.forEach(function(n) {
+    if (names.indexOf(n) >= 0 && ordered.indexOf(n) < 0) {
+      ordered.push(n);
+    }
+  });
+
+  names.forEach(function(n) {
+    if (ordered.indexOf(n) >= 0 || excluded.indexOf(n) >= 0) return;
+
+    try {
+      if (isArticleDataSheet(n)) ordered.push(n);
+    } catch (ignore) {}
   });
 
   return ordered;
 }
 
-function articleRowsFromSheet(name){
+function articleRowsFromSheet(name) {
   return articleReadSheet(name)
     .map(canonicalArticleRow)
-    .filter(r=>String(r.__articleKey||'').trim()!=='');
+    .filter(function(r) {
+      return String(r.__articleKey || '').trim() !== '';
+    });
 }
 
-/*
- * source:
- * master  = ARTICLE_MASTER only
- * import  = ARTICLE_MASTER_IMPORT / first discovered secondary source
- * both    = all compatible article sheets, deduplicated
- * auto    = all compatible article sheets, deduplicated
- *
- * Normal SPM frontend does not send source, therefore AUTO is used.
- */
-function articleRowsForSource(source){
-  source=String(source||'auto').trim().toLowerCase();
-  let sheets=articleSourceSheetNames();
+function articleRowsForSource(source) {
+  source = String(source || 'auto').trim().toLowerCase();
 
-  if(!sheets.length) return [];
+  var sheets = articleSourceSheetNames();
+  if (!sheets.length) return [];
 
-  if(source==='master'){
-    return sheets.includes('ARTICLE_MASTER')
-      ? articleRowsFromSheet('ARTICLE_MASTER')
-      : [];
+  if (source === 'master') {
+    return sheets.indexOf(S.AM) >= 0 ? articleRowsFromSheet(S.AM) : [];
   }
 
-  if(source==='import'){
-    let n=sheets.find(x=>x==='ARTICLE_MASTER_IMPORT')||sheets.find(x=>x!=='ARTICLE_MASTER');
-    return n?articleRowsFromSheet(n):[];
+  if (source === 'import') {
+    var importName = sheets.indexOf('ARTICLE_MASTER_IMPORT') >= 0
+      ? 'ARTICLE_MASTER_IMPORT'
+      : sheets.find(function(n) { return n !== S.AM; });
+
+    return importName ? articleRowsFromSheet(importName) : [];
   }
 
-  /*
-   * both / auto:
-   * Read every compatible source and keep first occurrence.
-   * ARTICLE_MASTER has priority because it is listed first.
-   */
-  let seen={},out=[];
+  var seen = {};
+  var result = [];
 
-  sheets.forEach(sheetName=>{
-    articleRowsFromSheet(sheetName).forEach(r=>{
-      let k=articleKey(r);
-      if(!k) return;
-      if(!seen[k]){
-        seen[k]=true;
-        out.push(r);
-      }
+  sheets.forEach(function(sheetName) {
+    articleRowsFromSheet(sheetName).forEach(function(r) {
+      var k = articleKey(r);
+      if (!k || seen[k]) return;
+      seen[k] = true;
+      result.push(r);
     });
   });
 
-  return out;
+  return result;
 }
 
-function articleMasterRows(){
+function articleMasterRows() {
   return articleRowsForSource('master');
 }
 
-function articleAuditRows(){
-  /*
-   * Kept only for backward compatibility. AUDIT_LOG is not
-   * treated as an article source because its schema is audit-only.
-   */
-  return [];
-}
+function assignedPincodes(officeId) {
+  var pins = [];
 
-function assignedPincodes(officeId){
-  let pins=[];
-  read(S.P).forEach(r=>{
-    if(act(r.ACTIVE)&&String(r.OFFICE_ID||'').trim()===String(officeId||'').trim()){
-      let p=normalizePin(r.PINCODE);
-      if(p) pins.push(p);
+  read(S.P).forEach(function(r) {
+    if (
+      activeValue(r.ACTIVE) &&
+      String(r.OFFICE_ID || '').trim() === String(officeId || '').trim()
+    ) {
+      var p = normalizePin(r.PINCODE);
+      if (p) pins.push(p);
     }
   });
 
-  if(!pins.length){
-    let o=read(S.O).find(r=>String(r.OFFICE_ID||'').trim()===String(officeId||'').trim());
-    if(o){
-      String(o.PINCODES||'').split(/[,;\s]+/).map(normalizePin).filter(Boolean).forEach(p=>pins.push(p));
+  if (!pins.length) {
+    var office = read(S.O).find(function(r) {
+      return String(r.OFFICE_ID || '').trim() === String(officeId || '').trim();
+    });
+
+    if (office) {
+      String(office.PINCODES || '')
+        .split(/[,;\s]+/)
+        .map(normalizePin)
+        .filter(Boolean)
+        .forEach(function(p) { pins.push(p); });
     }
   }
 
-  return [...new Set(pins)];
+  return unique(pins);
 }
 
-function statusMap(d){
-  let m={};
-  read(S.AS).filter(r=>date(r.DATE)===String(d)).forEach(r=>{
-    let key=String(r.ARTICLE_KEY||'').trim();
-    if(key) m[key]=r;
+function statusMap(d) {
+  var map = {};
+
+  read(S.AS).forEach(function(r) {
+    if (dateOnly(r.DATE) !== String(d)) return;
+
+    var key = String(r.ARTICLE_KEY || '').trim();
+    if (key) map[key] = r;
   });
-  return m;
+
+  return map;
 }
 
-function articleClient(r,st,source){
+function articleClient(r, status, source) {
   return {
-    articleKey:articleKey(r),
-    barCodeId:String(r.BAR_CODE_ID||''),
-    pmvApplicationNumber:String(r.PMV_APPLICATION_NUMBER||''),
-    artisanName:String(r.ARTISAN_NAME||''),
-    mobileNumber:String(r.MOBILE_NUMBER||''),
-    address:String(r.ARTISAN_CURRENT_ADDRESS||''),
-    circleName:String(r.CIRCLE_NAME||''),
-    divisionName:String(r.DIVISION_NAME||''),
-    pinCode:normalizePin(r.ARTISAN_PIN_CODE),
-    deliveryStaff:String(r.DELIVERY_STAFF_ASSIGNED_UNASSIGNED||''),
-    sourceStatus:String(r.TOOLKIT_DELIVERY_STATUS||''),
-    presentStatus:String(st?.STATUS||r.TOOLKIT_DELIVERY_STATUS||'Pending'),
-    remarks:String(st?.REMARKS||''),
-    updatedAt:st?.UPDATED_AT?String(st.UPDATED_AT):'',
-    dataSource:String(source||r.__sheet||'unknown')
+    articleKey: articleKey(r),
+    barCodeId: String(r.BAR_CODE_ID || ''),
+    pmvApplicationNumber: String(r.PMV_APPLICATION_NUMBER || ''),
+    artisanName: String(r.ARTISAN_NAME || ''),
+    mobileNumber: String(r.MOBILE_NUMBER || ''),
+    address: String(r.ARTISAN_CURRENT_ADDRESS || ''),
+    circleName: String(r.CIRCLE_NAME || ''),
+    divisionName: String(r.DIVISION_NAME || ''),
+    pinCode: normalizePin(r.ARTISAN_PIN_CODE),
+    deliveryStaff: String(r.DELIVERY_STAFF_ASSIGNED_UNASSIGNED || ''),
+    sourceStatus: String(r.TOOLKIT_DELIVERY_STATUS || ''),
+    presentStatus: String(
+      status && status.STATUS
+        ? status.STATUS
+        : (r.TOOLKIT_DELIVERY_STATUS || 'Pending')
+    ),
+    remarks: String(status && status.REMARKS ? status.REMARKS : ''),
+    statusDate: status ? dateOnly(status.DATE) : '',
+    updatedAt: status && status.UPDATED_AT ? String(status.UPDATED_AT) : '',
+    sourceSheet: String(source || r.__sheet || '')
   };
 }
 
-function spmArticles(p,s){
-  let a=auth(s);
-  if(a.role!==ROLE.SPM) throw Error('Only SPM users can access article details.');
+/* =========================================================
+   SPM ARTICLE API
+   ========================================================= */
 
-  /*
-   * Frontend currently does not send source.
-   * AUTO therefore checks all compatible article sources.
-   */
-  let source=String(p?.source||'auto').trim().toLowerCase();
-  if(!['auto','master','import','both'].includes(source)) source='auto';
-
-  let d=String(p?.date||today());
-  let q=String(p?.q||'').trim().toLowerCase();
-  let limit=Math.min(Math.max(Number(p?.limit||500),1),2000);
-  let officeId=String(a.user.OFFICE_ID||'').trim();
-  let pins=assignedPincodes(officeId);
-  let rows=articleRowsForSource(source);
-  let sm=statusMap(d);
-  let out=[],matchedByPincode=0;
-
-  rows.forEach(r=>{
-    if(out.length>=limit) return;
-    let pin=normalizePin(r.ARTISAN_PIN_CODE);
-    if(!pins.includes(pin)) return;
-
-    matchedByPincode++;
-
-    let hay=[
-      r.BAR_CODE_ID,r.PMV_APPLICATION_NUMBER,r.ARTISAN_NAME,
-      r.MOBILE_NUMBER,pin,r.ARTISAN_CURRENT_ADDRESS
-    ].join(' ').toLowerCase();
-
-    if(q&&!hay.includes(q)) return;
-
-    let key=articleKey(r);
-    out.push(articleClient(r,sm[key],r.__sheet));
-  });
-
-  let sourceSheets=articleSourceSheetNames();
-  let diagnostic='Article records loaded successfully.';
-  if(!sourceSheets.length) diagnostic='No compatible article-data sheet was detected.';
-  else if(!pins.length) diagnostic='No active PIN codes are assigned to this SPM office.';
-  else if(rows.length===0) diagnostic='Compatible article sheets exist, but contain no article rows.';
-  else if(matchedByPincode===0) diagnostic='Article records exist, but none match the SPM assigned PIN codes.';
-
-  return ok({
-    date:d,
-    officeId:officeId,
-    officeName:String(a.user.OFFICE_NAME||''),
-    source:source,
-    sourceSheets:sourceSheets,
-    pincodes:pins,
-    articles:out,
-    totalVisible:matchedByPincode,
-    returned:out.length,
-    totalSourceArticles:rows.length,
-    diagnostic:diagnostic
-  });
-}function updateArticleStatus(x, s) {
-  const a = auth(s);
+function spmArticles(params, session) {
+  var a = auth(session);
 
   if (a.role !== ROLE.SPM) {
-    throw Error('Only SPM users can update article status.');
+    throw new Error('Only SPM users can access articles.');
   }
 
-  const d = String(x?.date || today());
-  const key = String(
-    x?.articleKey ||
-    x?.pmvApplicationNumber ||
-    x?.barCodeId ||
+  params = params || {};
+
+  var d = String(params.date || today());
+  validateDate(d);
+
+  var pins = assignedPincodes(a.user.OFFICE_ID);
+
+  if (!pins.length) {
+    return ok({
+      date: d,
+      officeId: String(a.user.OFFICE_ID || ''),
+      officeName: String(a.user.OFFICE_NAME || ''),
+      assignedPincodes: [],
+      count: 0,
+      articles: [],
+      message: 'No PIN codes are configured for this office.'
+    });
+  }
+
+  var source = String(params.source || 'auto');
+  var rows = articleRowsForSource(source);
+  var statuses = statusMap(d);
+
+  var articles = rows.filter(function(r) {
+    return pins.indexOf(normalizePin(r.ARTISAN_PIN_CODE)) >= 0;
+  }).map(function(r) {
+    return articleClient(r, statuses[articleKey(r)], r.__sheet);
+  });
+
+  var search = String(params.search || '').trim().toLowerCase();
+
+  if (search) {
+    articles = articles.filter(function(a1) {
+      return [
+        a1.articleKey,
+        a1.barCodeId,
+        a1.pmvApplicationNumber,
+        a1.artisanName,
+        a1.mobileNumber,
+        a1.pinCode,
+        a1.presentStatus
+      ].join(' ').toLowerCase().indexOf(search) >= 0;
+    });
+  }
+
+  return ok({
+    date: d,
+    officeId: String(a.user.OFFICE_ID || ''),
+    officeName: String(a.user.OFFICE_NAME || ''),
+    assignedPincodes: pins,
+    source: source,
+    count: articles.length,
+    articles: articles
+  });
+}
+
+/* =========================================================
+   ADMIN ARTICLE STATUS
+   ========================================================= */
+
+function adminArticleStatus(params, session) {
+  var a = auth(session);
+
+  if ([ROLE.ADMIN, ROLE.DPS].indexOf(a.role) < 0) {
+    throw new Error('Only DPS/Admin users can access article status.');
+  }
+
+  params = params || {};
+
+  var d = String(params.date || today());
+  validateDate(d);
+
+  var source = String(params.source || 'auto');
+  var rows = articleRowsForSource(source);
+  var statuses = statusMap(d);
+
+  var filterOffice = String(params.officeId || '').trim();
+  var filterPin = normalizePin(params.pinCode);
+  var filterStatus = String(params.status || '').trim().toLowerCase();
+  var search = String(params.search || '').trim().toLowerCase();
+
+  var articles = rows.map(function(r) {
+    return articleClient(r, statuses[articleKey(r)], r.__sheet);
+  });
+
+  if (filterOffice) {
+    var officePins = assignedPincodes(filterOffice);
+    articles = articles.filter(function(x) {
+      return officePins.indexOf(x.pinCode) >= 0;
+    });
+  }
+
+  if (filterPin) {
+    articles = articles.filter(function(x) {
+      return x.pinCode === filterPin;
+    });
+  }
+
+  if (filterStatus) {
+    articles = articles.filter(function(x) {
+      return x.presentStatus.toLowerCase() === filterStatus;
+    });
+  }
+
+  if (search) {
+    articles = articles.filter(function(x) {
+      return [
+        x.articleKey,x.barCodeId,x.pmvApplicationNumber,x.artisanName,
+        x.mobileNumber,x.pinCode,x.presentStatus,x.officeName
+      ].join(' ').toLowerCase().indexOf(search) >= 0;
+    });
+  }
+
+  var summary = {};
+  articles.forEach(function(x) {
+    var st = x.presentStatus || 'Pending';
+    summary[st] = (summary[st] || 0) + 1;
+  });
+
+  return ok({
+    date: d,
+    source: source,
+    count: articles.length,
+    summary: summary,
+    articles: articles
+  });
+}
+
+/* =========================================================
+   ARTICLE STATUS UPDATE
+   ========================================================= */
+
+function updateArticleStatus(record, session) {
+  var a = auth(session);
+
+  if (a.role !== ROLE.SPM && a.role !== ROLE.ADMIN && a.role !== ROLE.DPS) {
+    throw new Error('You are not authorized to update article status.');
+  }
+
+  record = record || {};
+
+  var d = String(record.date || today());
+  validateDate(d);
+
+  var key = String(
+    record.articleKey ||
+    record.pmvApplicationNumber ||
+    record.barCodeId ||
     ''
   ).trim();
 
-  const status = String(x?.status || '').trim();
-  const remarks = String(x?.remarks || '').trim();
+  if (!key) throw new Error('Article key is required.');
 
-  const allowed = [
-    'Pending',
-    'Delivered',
-    'Redirected',
-    'RTS / Return',
-    'Not Received',
-    'Other'
-  ];
+  var status = String(record.status || '').trim();
+  if (!status) throw new Error('Present status is required.');
+  if (status.length > 100) throw new Error('Present status is too long.');
 
-  if (!key) {
-    throw Error('Article key is required.');
+  var remarks = String(record.remarks || '').trim();
+  if (remarks.length > 500) throw new Error('Remarks are too long.');
+
+  var rows = articleRowsForSource('auto');
+  var article = rows.find(function(r) {
+    return articleKey(r) === key ||
+      String(r.BAR_CODE_ID || '').trim() === key ||
+      String(r.PMV_APPLICATION_NUMBER || '').trim() === key;
+  });
+
+  if (!article) throw new Error('Article not found.');
+
+  if (a.role === ROLE.SPM) {
+    var pins = assignedPincodes(a.user.OFFICE_ID);
+    var articlePin = normalizePin(article.ARTISAN_PIN_CODE);
+
+    if (pins.indexOf(articlePin) < 0) {
+      throw new Error('This article is not assigned to your office PIN code.');
+    }
   }
 
-  if (!allowed.includes(status)) {
-    throw Error('Invalid article status.');
-  }
+  var officeId = a.role === ROLE.SPM
+    ? String(a.user.OFFICE_ID || '')
+    : String(record.officeId || a.user.OFFICE_ID || '');
 
-  // Read from both article sources
-  const rows = articleRowsForSource('auto');
+  var officeName = a.role === ROLE.SPM
+    ? String(a.user.OFFICE_NAME || '')
+    : String(record.officeName || a.user.OFFICE_NAME || '');
 
-  const article = rows.find(r => articleKey(r) === key);
-
-  if (!article) {
-    throw Error('Article not found in article master.');
-  }
-
-  // IMPORTANT:
-  // SPM can update ONLY articles belonging to his/her assigned PIN.
-  const assignedPins = assignedPincodes(a.user.OFFICE_ID);
-
-  const articlePin = normalizePin(article.ARTISAN_PIN_CODE);
-
-  if (!assignedPins.includes(articlePin)) {
-    throw Error(
-      'You are not authorized to update this article. ' +
-      'Article PIN ' + articlePin +
-      ' is outside your assigned PIN codes.'
-    );
-  }
-
-  const sh = sheet(S.AS);
-
-  // Find today's existing status
-  const existing = read(S.AS).find(r =>
-    date(r.DATE) === d &&
-    String(r.ARTICLE_KEY || '').trim() === key
-  );
-
-  const row = [
+  var values = [
     d,
-    key,
+    articleKey(article),
     String(article.BAR_CODE_ID || ''),
     String(article.PMV_APPLICATION_NUMBER || ''),
-    String(a.user.OFFICE_ID || ''),
-    String(a.user.OFFICE_NAME || ''),
+    officeId,
+    officeName,
     String(a.user.USER_ID || ''),
     String(a.user.NAME || ''),
     status,
@@ -613,224 +936,410 @@ function spmArticles(p,s){
     new Date()
   ];
 
+  var sh = sheet(S.AS);
+  var existing = null;
+  var data = read(S.AS);
+
+  data.forEach(function(r) {
+    if (
+      dateOnly(r.DATE) === d &&
+      String(r.ARTICLE_KEY || '').trim() === articleKey(article)
+    ) {
+      existing = r;
+    }
+  });
+
   if (existing) {
-    sh.getRange(
-      existing.__row,
-      1,
-      1,
-      row.length
-    ).setValues([row]);
+    sh.getRange(existing.__row, 1, 1, values.length).setValues([values]);
   } else {
-    sh.appendRow(row);
+    sh.appendRow(values);
   }
 
-  SpreadsheetApp.flush();
-
-  audit(
-    a.user.USER_ID,
-    'ARTICLE_STATUS',
-    d +
-    ' | ARTICLE=' + key +
-    ' | STATUS=' + status +
-    ' | REMARKS=' + remarks
-  );
+  audit(a.user.USER_ID, 'ARTICLE_STATUS_UPDATE', d + ' / ' + articleKey(article));
 
   return ok({
-    success: true,
-    articleKey: key,
-    status: status,
-    remarks: remarks,
     date: d,
-    officeId: String(a.user.OFFICE_ID || ''),
-    officeName: String(a.user.OFFICE_NAME || ''),
-    updatedBy: String(a.user.USER_ID || ''),
-    dataSource: String(article.__sheet || '')
+    articleKey: articleKey(article),
+    status: status,
+    remarks: remarks
   }, 'Article status updated successfully.');
 }
 
-function adminArticleStatus(p,s){
-  let a=auth(s);
-  if(![ROLE.ADMIN,ROLE.DPS].includes(a.role))
-    throw Error('Only DPS/Admin users can access article status.');
-
-  let d=String(p?.date||today());
-  let source=String(p?.source||'auto').trim().toLowerCase();
-  if(!['auto','master','import','both'].includes(source)) source='auto';
-
-  let q=String(p?.q||'').trim().toLowerCase();
-  let office=String(p?.officeId||'').trim();
-  let limit=Math.min(Math.max(Number(p?.limit||1000),1),5000);
-  let sm=statusMap(d);
-  let rows=articleRowsForSource(source);
-  let out=[];
-
-  rows.forEach(r=>{
-    if(out.length>=limit) return;
-
-    let key=articleKey(r),st=sm[key],c=articleClient(r,st,r.__sheet);
-    let rowOffice=String(st?.OFFICE_ID||'').trim();
-
-    if(office&&rowOffice!==office) return;
-
-    let hay=[
-      c.barCodeId,c.pmvApplicationNumber,c.artisanName,
-      c.pinCode,c.presentStatus,rowOffice
-    ].join(' ').toLowerCase();
-
-    if(q&&!hay.includes(q)) return;
-
-    out.push({
-      ...c,
-      officeId:rowOffice,
-      officeName:String(st?.OFFICE_NAME||''),
-      spmId:String(st?.SPM_ID||''),
-      spmName:String(st?.SPM_NAME||'')
-    });
-  });
-
-  return ok({
-    date:d,
-    source:source,
-    sourceSheets:articleSourceSheetNames(),
-    articles:out,
-    total:out.length,
-    totalSourceArticles:rows.length,
-    updatedCount:read(S.AS).filter(r=>
-      date(r.DATE)===d&&(!office||String(r.OFFICE_ID)===office)
-    ).length
-  });
-}
-
 /* =========================================================
-   ARTICLE DIAGNOSTIC
+   SOURCE DIAGNOSTIC
    ========================================================= */
 
-function articleSourceDiagnostic(p,s){
-  let a=auth(s);
-  if(![ROLE.ADMIN,ROLE.DPS,ROLE.SPM].includes(a.role))
-    throw Error('Not authorized.');
+function articleSourceDiagnostic(params, session) {
+  var a = auth(session);
 
-  let sheets=articleSourceSheetNames();
-  let detail=sheets.map(name=>{
-    let rows=articleRowsFromSheet(name);
-    let pins={};
-    rows.forEach(r=>{
-      let p=normalizePin(r.ARTISAN_PIN_CODE);
-      if(p) pins[p]=(pins[p]||0)+1;
-    });
-    return {
-      sheet:name,
-      articleCount:rows.length,
-      firstArticle:rows.length?articleClient(rows[0],null,name):null,
-      pinCounts:pins
+  if ([ROLE.ADMIN, ROLE.DPS].indexOf(a.role) < 0) {
+    throw new Error('Only DPS/Admin users can run article diagnostics.');
+  }
+
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var names = ss.getSheets().map(function(sh) { return sh.getName(); });
+  var sources = articleSourceSheetNames();
+
+  var diagnostics = names.map(function(name) {
+    var result = {
+      sheet: name,
+      rows: 0,
+      compatible: false,
+      usableArticles: 0,
+      error: ''
     };
+
+    try {
+      var rows = articleReadSheet(name);
+      result.rows = rows.length;
+
+      if (rows.length) {
+        result.compatible = isArticleDataSheet(name);
+        if (result.compatible) {
+          result.usableArticles = articleRowsFromSheet(name).length;
+        }
+      }
+    } catch (ex) {
+      result.error = errorMessage(ex);
+    }
+
+    return result;
   });
 
-  let officeId=String(a.user.OFFICE_ID||'');
-  let assigned=assignedPincodes(officeId);
-  let autoRows=articleRowsForSource('auto');
-  let matching=autoRows.filter(r=>assigned.includes(normalizePin(r.ARTISAN_PIN_CODE)));
+  var all = articleRowsForSource('auto');
 
   return ok({
-    officeId:officeId,
-    officeName:String(a.user.OFFICE_NAME||''),
-    assignedPincodes:assigned,
-    detectedSheets:sheets,
-    sheetDetails:detail,
-    autoArticleCount:autoRows.length,
-    matchingAssignedPinArticles:matching.length,
-    matchingExamples:matching.slice(0,10).map(r=>articleClient(r,null,r.__sheet))
+    spreadsheetId: SPREADSHEET_ID,
+    detectedSourceSheets: sources,
+    totalUniqueArticles: all.length,
+    diagnostics: diagnostics,
+    aliases: ARTICLE_HEADER_ALIASES
   });
 }
 
 /* =========================================================
-   GENERAL HELPERS
+   HELPERS
    ========================================================= */
 
-function findUser(id){
-  return read(S.U).find(r=>String(r.USER_ID).trim()===String(id).trim());
+function findUser(userId) {
+  var id = String(userId == null ? '' : userId).trim();
+  if (!id) return null;
+
+  var rows = read(S.U);
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i].USER_ID || '').trim() === id) return rows[i];
+  }
+
+  return null;
 }
 
-function findReport(id,d){
-  return read(S.R).find(r=>String(r.SPM_ID)===String(id)&&date(r.DATE)===d);
+function findReport(spmId, d) {
+  var id = String(spmId || '').trim();
+  var dateValue = String(d || '');
+
+  var rows = read(S.R);
+  for (var i = 0; i < rows.length; i++) {
+    if (
+      String(rows[i].SPM_ID || '').trim() === id &&
+      dateOnly(rows[i].DATE) === dateValue
+    ) {
+      return rows[i];
+    }
+  }
+
+  return null;
 }
 
-function auth(s){
-  if(!s?.userId||!s?.token)
-    throw Error('Not authenticated. Please sign in again.');
+function previousBalance(officeId, d, type) {
+  var oid = String(officeId || '').trim();
+  var target = String(d || '');
 
-  let x=read(S.SS).find(r=>
-    String(r.TOKEN)===String(s.token)&&
-    String(r.USER_ID)===String(s.userId)&&
-    act(r.ACTIVE)
-  );
+  var rows = read(S.R).filter(function(r) {
+    return String(r.OFFICE_ID || '').trim() === oid &&
+      dateOnly(r.DATE) < target;
+  });
 
-  if(!x) throw Error('Session expired or invalid. Please log in again.');
-  if(new Date(x.EXPIRES_AT).getTime()<=Date.now())
-    throw Error('Session expired. Please log in again.');
+  rows.sort(function(a, b) {
+    return dateOnly(b.DATE).localeCompare(dateOnly(a.DATE));
+  });
 
-  let u=findUser(s.userId);
-  if(!u||!act(u.ACTIVE)) throw Error('Account is inactive.');
+  if (!rows.length) return 0;
 
-  return {user:u,role:String(u.ROLE||'').toUpperCase()};
+  return type === 'K'
+    ? num(rows[0].CLOSING_PENDING_KITS)
+    : num(rows[0].CLOSING_PENDING_ARTICLES);
 }
 
-function parse(s){
-  if(!s) return null;
-  if(typeof s==='object') return s;
-  try{return JSON.parse(s)}catch(e){return null;}
+function norm(x) {
+  x = x || {};
+
+  var r = {
+    id: String(x.id || Utilities.getUuid()),
+    date: String(x.date || today()),
+
+    newKits: cleanCount(x.newKits),
+    newArticles: cleanCount(x.newArticles),
+    redirectedKits: cleanCount(x.redirectedKits),
+    redirectedArticles: cleanCount(x.redirectedArticles),
+    rtsKits: cleanCount(x.rtsKits),
+    rtsArticles: cleanCount(x.rtsArticles),
+    deliveredKits: cleanCount(x.deliveredKits),
+    deliveredArticles: cleanCount(x.deliveredArticles),
+
+    invalidMobileKits: cleanCount(x.invalidMobileKits),
+    invalidMobileArticles: cleanCount(x.invalidMobileArticles),
+    tornKits: cleanCount(x.tornKits),
+    tornArticles: cleanCount(x.tornArticles),
+    deliverableKits: cleanCount(x.deliverableKits),
+    deliverableArticles: cleanCount(x.deliverableArticles),
+    incompleteKits: cleanCount(x.incompleteKits),
+    incompleteArticles: cleanCount(x.incompleteArticles)
+  };
+
+  validateDate(r.date);
+  return r;
 }
 
-function read(n){
-  let sh=sheet(n),v=sh.getDataRange().getValues(),h=v.shift()||[];
-  return v.map((r,i)=>{
-    let o={__row:i+2};
-    h.forEach((k,j)=>o[k]=r[j]);
-    return o;
+function emptyClient(d) {
+  return {
+    date: d,
+    openingKits: 0,
+    openingArticles: 0,
+    newKits: 0,
+    newArticles: 0,
+    redirectedKits: 0,
+    redirectedArticles: 0,
+    rtsKits: 0,
+    rtsArticles: 0,
+    deliveredKits: 0,
+    deliveredArticles: 0,
+    invalidMobileKits: 0,
+    invalidMobileArticles: 0,
+    tornKits: 0,
+    tornArticles: 0,
+    deliverableKits: 0,
+    deliverableArticles: 0,
+    incompleteKits: 0,
+    incompleteArticles: 0,
+    closingPendingKits: 0,
+    closingPendingArticles: 0
+  };
+}
+
+function client(r) {
+  return {
+    date: dateOnly(r.DATE),
+    openingKits: num(r.OPENING_KITS),
+    openingArticles: num(r.OPENING_ARTICLES),
+    newKits: num(r.NEW_KITS),
+    newArticles: num(r.NEW_ARTICLES),
+    redirectedKits: num(r.REDIRECTED_KITS),
+    redirectedArticles: num(r.REDIRECTED_ARTICLES),
+    rtsKits: num(r.RTS_KITS),
+    rtsArticles: num(r.RTS_ARTICLES),
+    deliveredKits: num(r.DELIVERED_KITS),
+    deliveredArticles: num(r.DELIVERED_ARTICLES),
+    invalidMobileKits: num(r.INVALID_MOBILE_KITS),
+    invalidMobileArticles: num(r.INVALID_MOBILE_ARTICLES),
+    tornKits: num(r.TORN_KITS),
+    tornArticles: num(r.TORN_ARTICLES),
+    deliverableKits: num(r.DELIVERABLE_KITS),
+    deliverableArticles: num(r.DELIVERABLE_ARTICLES),
+    incompleteKits: num(r.INCOMPLETE_KITS),
+    incompleteArticles: num(r.INCOMPLETE_ARTICLES),
+    closingPendingKits: num(r.CLOSING_PENDING_KITS),
+    closingPendingArticles: num(r.CLOSING_PENDING_ARTICLES)
+  };
+}
+
+function officeBase(x) {
+  return {
+    officeId: String(x.OFFICE_ID || ''),
+    officeName: String(x.OFFICE_NAME || ''),
+    totalSpms: 0,
+    updatedSpms: 0,
+    pendingSpms: 0,
+
+    openingKits: 0,
+    newKits: 0,
+    redirectedKits: 0,
+    rtsKits: 0,
+    deliveredKits: 0,
+    closingPendingKits: 0,
+
+    openingArticles: 0,
+    newArticles: 0,
+    redirectedArticles: 0,
+    rtsArticles: 0,
+    deliveredArticles: 0,
+    closingPendingArticles: 0
+  };
+}
+
+function read(sheetName) {
+  var sh = sheet(sheetName);
+
+  if (sh.getLastRow() < 2 || sh.getLastColumn() < 1) {
+    return [];
+  }
+
+  var values = sh.getDataRange().getValues();
+  var headers = values.shift();
+
+  return values.map(function(row, i) {
+    var obj = { __row: i + 2 };
+
+    headers.forEach(function(h, j) {
+      var key = String(h == null ? '' : h).trim();
+      if (key) obj[key] = row[j];
+    });
+
+    return obj;
   });
 }
 
-function sheet(n){
-  let sh=SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(n);
-  if(!sh) throw Error('Missing sheet '+n+'. Run setupSpreadsheet() once.');
+function sheet(name) {
+  var sh = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(name);
+  if (!sh) throw new Error('Sheet not found: ' + name);
   return sh;
 }
 
-function date(v){
-  return v instanceof Date?Utilities.formatDate(v,TZ,'yyyy-MM-dd'):String(v||'').slice(0,10);
+function audit(userId, action, details) {
+  try {
+    sheet(S.A).appendRow([
+      new Date(),
+      String(userId || ''),
+      String(action || ''),
+      String(details || '')
+    ]);
+  } catch (ignore) {}
 }
 
-function today(){
-  return Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd');
-}
-
-function num(v){
-  let n=Number(v);
-  return Number.isFinite(n)?n:0;
-}
-
-function act(v){
-  return v===true||['true','yes','1','active','y'].includes(String(v).toLowerCase().trim());
-}
-
-function mob(v){
-  return String(v||'').replace(/\D/g,'');
-}
-
-function audit(u,a,d){
-  try{sheet(S.A).appendRow([new Date(),u,a,d]);}catch(e){}
-}
-
-function ok(d,m){
-  return {success:true,data:d,message:m||'OK'};
-}
-
-function err(m){
-  return {success:false,data:null,message:String(m||'Request failed.')};
-}
-
-function out(x){
+function out(payload) {
   return ContentService
-    .createTextOutput(JSON.stringify(x))
+    .createTextOutput(JSON.stringify(payload))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function ok(data, message) {
+  return {
+    success: true,
+    data: data === undefined ? null : data,
+    message: message || ''
+  };
+}
+
+function err(message) {
+  return {
+    success: false,
+    error: String(message || 'Unknown error')
+  };
+}
+
+function parseSession(value) {
+  if (!value) return null;
+
+  if (typeof value === 'object') return value;
+
+  var s = String(value).trim();
+
+  try {
+    var parsed = JSON.parse(s);
+    if (parsed && typeof parsed === 'object') return parsed;
+  } catch (ignore) {}
+
+  return { token: s };
+}
+
+function activeValue(v) {
+  var s = String(v == null ? '' : v).trim().toUpperCase();
+  return v === true || s === 'TRUE' || s === 'YES' || s === 'Y' || s === '1' || s === 'ACTIVE';
+}
+
+function mobileNorm(v) {
+  return String(v == null ? '' : v).replace(/\D/g, '').slice(-10);
+}
+
+function num(v) {
+  if (typeof v === 'number') {
+    if (!isFinite(v)) return 0;
+    return Math.min(MAX_VALUE, Math.max(0, v));
+  }
+
+  var s = String(v == null ? '' : v).replace(/,/g, '').trim();
+  if (!s) return 0;
+
+  var n = Number(s);
+  if (!isFinite(n)) return 0;
+
+  return Math.min(MAX_VALUE, Math.max(0, n));
+}
+
+function cleanCount(v) {
+  return Math.floor(num(v));
+}
+
+function dateOnly(v) {
+  if (v instanceof Date && !isNaN(v.getTime())) {
+    return Utilities.formatDate(v, TZ, 'yyyy-MM-dd');
+  }
+
+  var s = String(v == null ? '' : v).trim();
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+  var m = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (m) {
+    return m[1] + '-' +
+      ('0' + m[2]).slice(-2) + '-' +
+      ('0' + m[3]).slice(-2);
+  }
+
+  var d = new Date(s);
+  if (!isNaN(d.getTime())) {
+    return Utilities.formatDate(d, TZ, 'yyyy-MM-dd');
+  }
+
+  return '';
+}
+
+function today() {
+  return Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+}
+
+function validateDate(d) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(d || ''))) {
+    throw new Error('Invalid date. Expected YYYY-MM-DD.');
+  }
+
+  var parts = String(d).split('-');
+  var dt = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+
+  if (
+    dt.getFullYear() !== Number(parts[0]) ||
+    dt.getMonth() !== Number(parts[1]) - 1 ||
+    dt.getDate() !== Number(parts[2])
+  ) {
+    throw new Error('Invalid calendar date.');
+  }
+}
+
+function unique(arr) {
+  var seen = {};
+  var result = [];
+
+  arr.forEach(function(v) {
+    var k = String(v);
+    if (!seen[k]) {
+      seen[k] = true;
+      result.push(v);
+    }
+  });
+
+  return result;
+}
+
+function errorMessage(ex) {
+  if (!ex) return 'Unknown error.';
+  return ex.message ? String(ex.message) : String(ex);
 }
