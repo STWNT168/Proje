@@ -66,9 +66,35 @@
       <div class="section-title"><span>3</span> Article-wise Daily Status</div>
       <div class="table-note">You can see only articles mapped to your office's PIN codes. Search by barcode, PMV application number, artisan name or PIN code.</div>
       <div class="article-tools">
-        <input id="article-search" type="search" placeholder="Search barcode / PMV application / artisan / PIN code">
-        <button id="article-fetch" type="button" class="btn btn-primary">FETCH ARTICLES</button>
-      </div>
+  <input
+    id="article-search"
+    type="search"
+    placeholder="Search barcode / PMV application / artisan / PIN code">
+
+  <select id="article-status-filter" aria-label="Filter article status">
+    <option value="All">All Status</option>
+    <option value="Pending">Pending</option>
+    <option value="Delivered">Delivered</option>
+    <option value="Redirected">Redirected</option>
+    <option value="RTS / Return">RTS / Return</option>
+    <option value="Not Received">Not Received</option>
+    <option value="Other">Other</option>
+  </select>
+
+  <button
+    id="article-fetch"
+    type="button"
+    class="btn btn-primary">
+    FETCH ARTICLES
+  </button>
+
+  <button
+    id="article-export-csv"
+    type="button"
+    class="btn btn-light">
+    EXPORT CSV
+  </button>
+</div>
       <div id="article-scope" class="notice"></div>
       <div class="table-wrap"><table id="spmArticles"></table></div>
     </div>
