@@ -633,28 +633,36 @@ function logout(session) {
  */
 
 function assignedPincodes(officeId) {
-
   const oid = normalizeId(officeId);
+  const pins = [];
 
-  const result = {};
-
-  /* ---------- PINCODE_MASTER ---------- */
-
-  const pincodeRows = readSheet(S.P);
-
-  pincodeRows.forEach(function(row) {
-
-    const rowOffice = normalizeId(row.OFFICE_ID);
-    const pin = normalizePin(row.PINCODE);
-
+  read(S.P).forEach(r => {
     if (
-      rowOffice === oid &&
-      active(row.ACTIVE) &&
-      pin
+      act(r.ACTIVE) &&
+      normalizeId(r.OFFICE_ID) === oid
     ) {
-      result[pin] = true;
+      const pin = normalizePin(r.PINCODE);
+      if (pin) pins.push(pin);
     }
   });
+
+  // Fallback to OFFICE_MASTER
+  if (!pins.length) {
+    const office = read(S.O).find(
+      r => normalizeId(r.OFFICE_ID) === oid
+    );
+
+    if (office) {
+      String(office.PINCODES || '')
+        .split(/[,;\s]+/)
+        .map(normalizePin)
+        .filter(Boolean)
+        .forEach(pin => pins.push(pin));
+    }
+  }
+
+  return [...new Set(pins)];
+}
 
 
   /* ---------- OFFICE_MASTER fallback ---------- */
