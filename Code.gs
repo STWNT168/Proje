@@ -1198,17 +1198,48 @@ function getSpmArticles(params, session) {
       }
 
 
-      const searchable = [
+      /*
+       * Refined search:
+       * - Searches all important article fields.
+       * - Supports multiple words in any order.
+       * - Ignores case, spaces, punctuation and formatting differences.
+       * - A result matches when every search term is found.
+       */
+
+      function normalizeSearchText(value) {
+        return String(value == null ? '' : value)
+          .toUpperCase()
+          .replace(/[^A-Z0-9]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+
+      const searchable = normalizeSearchText([
         article.BAR_CODE_ID,
         article.PMV_APPLICATION_NUMBER,
         article.ARTISAN_NAME,
-        article.ARTISAN_PIN_CODE
-      ]
-      .join(' ')
-      .toUpperCase();
+        article.MOBILE_NUMBER,
+        article.ARTISAN_CURRENT_ADDRESS,
+        article.CIRCLE_NAME,
+        article.DIVISION_NAME,
+        article.ARTISAN_PIN_CODE,
+        article.DELIVERY_STAFF_ASSIGNED_UNASSIGNED,
+        article.TOOLKIT_DELIVERY_STATUS
+      ].join(' '));
 
+      const searchTerms =
+        query
+          .split(/\s+/)
+          .map(function(term) {
+            return normalizeSearchText(term);
+          })
+          .filter(function(term) {
+            return term !== '';
+          });
 
-      return searchable.indexOf(query) !== -1;
+      return searchTerms.every(function(term) {
+        return searchable.indexOf(term) !== -1;
+      });
     });
 
 
