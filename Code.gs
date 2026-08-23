@@ -961,8 +961,8 @@ function allArticleRows() {
 
   const sheets = articleSourceSheets();
 
-  const seen = {};
-  const result = [];
+  const map = {};
+  const order = [];
 
   sheets.forEach(function(sheetName) {
 
@@ -976,15 +976,47 @@ function allArticleRows() {
 
         if (!key) return;
 
-        if (!seen[key]) {
+        if (!map[key]) {
 
-          seen[key] = true;
-          result.push(article);
+          map[key] = article;
+          order.push(key);
+
+        } else {
+
+          /*
+           * Same application/article key already seen
+           * (e.g. one artisan with multiple physical
+           * barcodes/kits under the same PMV application
+           * number, sitting on separate rows). Merge the
+           * extra barcode(s) into the kept row instead of
+           * silently dropping them, so every barcode stays
+           * searchable.
+           */
+
+          const existing = map[key];
+
+          const existingCodes =
+            String(existing.BAR_CODE_ID || '')
+              .split(/[,;\s]+/)
+              .filter(Boolean);
+
+          String(article.BAR_CODE_ID || '')
+            .split(/[,;\s]+/)
+            .filter(Boolean)
+            .forEach(function(code) {
+              if (existingCodes.indexOf(code) === -1) {
+                existingCodes.push(code);
+              }
+            });
+
+          existing.BAR_CODE_ID = existingCodes.join(',');
         }
       });
   });
 
-  return result;
+  return order.map(function(key) {
+    return map[key];
+  });
 }
 
 
