@@ -53,11 +53,30 @@ function doGet(e){
 function doPost(e){
   try{
     let b=JSON.parse(e.postData?.contents||'{}');
-    if(b.action==='login') return out(login(b.userId,b.mobile));
-    if(b.action==='logout') return out(logout(parse(b.session)));
-    if(b.action==='submitPmvReport') return out(submit(b.record,parse(b.session)));
-    if(b.action==='updateArticleStatus') return out(updateArticleStatus(b.record,parse(b.session)));
+
+    if(b.action==='login')
+      return out(login(b.userId,b.mobile));
+
+    if(b.action==='logout')
+      return out(logout(parse(b.session)));
+
+    if(b.action==='submitPmvReport')
+      return out(submit(b.record,parse(b.session)));
+
+    if(b.action==='updateArticleStatus')
+      return out(updateArticleStatus(
+        b.record,
+        parse(b.session)
+      ));
+
+    if(b.action==='updateArticleMasterStatus')
+      return out(updateArticleMasterStatus(
+        b.record,
+        parse(b.session)
+      ));
+
     return out(err('Unknown POST action.'));
+
   }catch(x){
     return out(err(x.message));
   }
