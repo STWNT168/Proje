@@ -61,6 +61,10 @@
         q:q,
         limit:500
       });
-    }
+    },
+
+    pushAdminArticlesToMaster:(date,articleKeys)=>req('POST','pushArticleStatusToMaster',{
+      record:{date,articleKeys}
+    })
   };
 })();

@@ -6,6 +6,7 @@
   const mobile=x=>String(x||'').replace(/(\d{2})\d{6}(\d{2})/,'$1******$2');
 
   let lastSpmRows=[];
+  let lastAdminRows=[];
 
   const opts=v=>statuses.map(x=>
     `<option value="${esc(x)}" ${x===v?'selected':''}>${esc(x)}</option>`
@@ -17,6 +18,15 @@
 
   function filtered(rows){
     const f=currentFilter();
+    return f==='All' ? rows : rows.filter(r=>String(r.presentStatus||'Pending')===f);
+  }
+
+  function currentAdminFilter(){
+    return String($('admin-article-status-filter')?.value||'All');
+  }
+
+  function filteredAdmin(rows){
+    const f=currentAdminFilter();
     return f==='All' ? rows : rows.filter(r=>String(r.presentStatus||'Pending')===f);
   }
 
@@ -160,10 +170,12 @@ window.__spmArticleMeta = {
   }
 
   function adminTable(rows){
+    const view=filteredAdmin(rows);
+
     $('adminArticles').innerHTML=
       '<thead><tr><th>Barcode</th><th>PMV Application</th><th>Artisan</th><th>PIN</th><th>Office</th><th>SPM</th><th>Present Status</th><th>Remarks</th><th>Updated</th></tr></thead>'+
       '<tbody>'+
-      rows.map(r=>`<tr>
+      view.map(r=>`<tr>
         <td>${esc(r.barCodeId)}</td>
         <td>${esc(r.pmvApplicationNumber)}</td>
         <td>${esc(r.artisanName)}<small>${mobile(r.mobileNumber)}</small></td>
@@ -183,12 +195,38 @@ window.__spmArticleMeta = {
           q=$('admin-article-search').value.trim(),
           x=await PMVApi.adminArticles(d,q);
 
+      lastAdminRows=Array.isArray(x.articles)?x.articles:[];
+
       $('admin-article-status').textContent=
         `${x.total||x.count||0} records shown · ${x.updatedCount||0} status updates for ${d}.`;
 
-      adminTable(x.articles||[]);
+      adminTable(lastAdminRows);
     }catch(e){
       $('admin-article-status').textContent=e.message;
+      toast(e.message,1);
+    }
+  }
+
+  async function pushAdminToMaster(){
+    const rows=filteredAdmin(lastAdminRows);
+
+    if(!rows.length){
+      toast('No articles to push.',1);
+      return;
+    }
+
+    const keys=[...new Set(rows.map(r=>r.articleKey).filter(Boolean))];
+    const d=$('admin-date').value;
+
+    if(!confirm(`Push present status for ${keys.length} article(s) shown here into the master sheet? SPM-recorded statuses will overwrite the status column at the source.`)){
+      return;
+    }
+
+    try{
+      const res=await PMVApi.pushAdminArticlesToMaster(d,keys);
+      toast(`${res.pushed} pushed to master${res.skipped?`, ${res.skipped} skipped (no SPM update).`:'.'}`);
+      await loadAdminArticles();
+    }catch(e){
       toast(e.message,1);
     }
   }
@@ -211,7 +249,13 @@ window.__spmArticleMeta = {
       if(e.key==='Enter')loadAdminArticles();
     });
     $('admin-date')?.addEventListener('change',loadAdminArticles);
+
+    $('admin-article-status-filter')?.addEventListener('change',()=>{
+      adminTable(lastAdminRows);
+    });
+
+    $('admin-article-push')?.addEventListener('click',pushAdminToMaster);
   }
 
-  window.PMVArticles={bind,loadSpm,loadAdminArticles,exportCsv};
+  window.PMVArticles={bind,loadSpm,loadAdminArticles,exportCsv,pushAdminToMaster};
 })();
