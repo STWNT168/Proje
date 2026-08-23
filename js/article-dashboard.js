@@ -30,28 +30,37 @@
     return f==='All' ? rows : rows.filter(r=>String(r.presentStatus||'Pending')===f);
   }
 
+  function statusPill(v){
+    const n=String(v||'Pending');
+    const cls=n==='Delivered'?'green':n==='Redirected'?'blue':(n==='RTS / Return'||n==='Not Received')?'red':'amber';
+    return `<i class="pill ${cls}">${esc(n)}</i>`;
+  }
+
   function spmTable(rows){
     const view=filtered(rows);
     lastSpmRows=view;
 
     $('spmArticles').innerHTML=
-      '<thead><tr><th>Barcode</th><th>PMV Application</th><th>Artisan</th><th>PIN</th><th>Source Status</th><th>Present Status</th><th>Remarks</th><th>Action</th></tr></thead>'+
+      '<thead><tr><th>Barcode</th><th>PMV Application</th><th>Artisan</th><th>Mobile</th><th>Address</th><th>Circle</th><th>Division</th><th>PIN</th><th>Delivery Staff</th><th>Source Status</th><th>Present Status</th><th>Remarks</th><th>Action</th></tr></thead>'+
       '<tbody>'+
       view.map(r=>`<tr>
-        <td>${esc(r.barCodeId)}</td>
+        <td><strong>${esc(r.barCodeId)}</strong></td>
         <td>${esc(r.pmvApplicationNumber)}</td>
-        <td><strong>${esc(r.artisanName)}</strong><small>${mobile(r.mobileNumber)}</small></td>
+        <td>${esc(r.artisanName)}</td>
+        <td>${esc(r.mobileNumber)}</td>
+        <td title="${esc(r.address)}">${esc(r.address)}</td>
+        <td>${esc(r.circleName)}</td>
+        <td>${esc(r.divisionName)}</td>
         <td>${esc(r.pinCode)}</td>
-        <td>${esc(r.sourceStatus)}</td>
+        <td>${esc(r.deliveryStaff)}</td>
+        <td>${statusPill(r.sourceStatus)}</td>
         <td><select data-key="${esc(r.articleKey)}" class="article-status">${opts(r.presentStatus)}</select></td>
         <td><input data-key="${esc(r.articleKey)}" class="article-remarks" value="${esc(r.remarks)}" placeholder="Remarks"></td>
         <td><button type="button" class="btn btn-primary article-save" data-key="${esc(r.articleKey)}">SAVE</button></td>
       </tr>`).join('')+
       '</tbody>';
 
-    document.querySelectorAll('.article-save').forEach(
-      b=>b.onclick=()=>saveSpm(b.dataset.key)
-    );
+    document.querySelectorAll('.article-save').forEach(b=>b.onclick=()=>saveSpm(b.dataset.key));
 
     const scope=$('article-scope');
     if(scope){
@@ -173,20 +182,41 @@ window.__spmArticleMeta = {
     const view=filteredAdmin(rows);
 
     $('adminArticles').innerHTML=
-      '<thead><tr><th>Barcode</th><th>PMV Application</th><th>Artisan</th><th>PIN</th><th>Office</th><th>SPM</th><th>Present Status</th><th>Remarks</th><th>Updated</th></tr></thead>'+
+      '<thead><tr><th>Barcode</th><th>PMV Application</th><th>Artisan</th><th>Mobile</th><th>Address</th><th>Circle</th><th>Division</th><th>PIN</th><th>Office</th><th>SPM</th><th>Present</th><th>Master</th><th>Sync</th><th>Remarks</th><th>Updated</th><th>Action</th></tr></thead>'+
       '<tbody>'+
       view.map(r=>`<tr>
-        <td>${esc(r.barCodeId)}</td>
+        <td><strong>${esc(r.barCodeId)}</strong></td>
         <td>${esc(r.pmvApplicationNumber)}</td>
-        <td>${esc(r.artisanName)}<small>${mobile(r.mobileNumber)}</small></td>
+        <td>${esc(r.artisanName)}</td>
+        <td>${esc(r.mobileNumber)}</td>
+        <td title="${esc(r.address)}">${esc(r.address)}</td>
+        <td>${esc(r.circleName)}</td>
+        <td>${esc(r.divisionName)}</td>
         <td>${esc(r.pinCode)}</td>
         <td>${esc(r.officeName)}</td>
         <td>${esc(r.spmName)}<small>${esc(r.spmId)}</small></td>
-        <td><i class="pill ${r.presentStatus==='Delivered'?'green':'amber'}">${esc(r.presentStatus)}</i></td>
+        <td><select class="admin-master-status" data-key="${esc(r.articleKey)}">${opts(r.presentStatus)}</select></td>
+        <td>${statusPill(r.sourceStatus)}</td>
+        <td>${statusPill(r.masterSyncStatus||'Not Updated')}</td>
         <td>${esc(r.remarks)}</td>
         <td>${esc(r.updatedAt)}</td>
+        <td><button type="button" class="btn btn-primary admin-direct-save" data-key="${esc(r.articleKey)}">UPDATE MASTER</button></td>
       </tr>`).join('')+
       '</tbody>';
+
+    document.querySelectorAll('.admin-direct-save').forEach(b=>b.onclick=()=>updateMasterDirect(b.dataset.key));
+  }
+
+  async function updateMasterDirect(key){
+    const el=document.querySelector(`.admin-master-status[data-key="${CSS.escape(key)}"]`);
+    if(!el) return;
+    if(!confirm(`Update ARTICLE_MASTER directly for ${key} to "${el.value}"?`)) return;
+
+    try{
+      const x=await PMVApi.updateArticleMaster({articleKey:key,status:el.value});
+      toast(`Master updated: ${x.newStatus}`);
+      await loadAdminArticles();
+    }catch(e){toast(e.message,1);}
   }
 
   async function loadAdminArticles(){
@@ -197,8 +227,13 @@ window.__spmArticleMeta = {
 
       lastAdminRows=Array.isArray(x.articles)?x.articles:[];
 
-      $('admin-article-status').textContent=
-        `${x.total||x.count||0} records shown · ${x.updatedCount||0} status updates for ${d}.`;
+      const sc=x.statusCounts||{};
+      const sy=x.syncCounts||{};
+      $('admin-article-status').innerHTML=
+        `<strong>${x.total||x.count||0}</strong> records · `+
+        `<b>Delivered ${sc.Delivered||0}</b> · <b>Pending ${sc.Pending||0}</b> · `+
+        `<b>Redirected ${sc.Redirected||0}</b> · <b>RTS ${sc['RTS / Return']||0}</b> · `+
+        `<b>Synced ${sy.Synced||0}</b> · <b>Pending Sync ${sy['Pending Sync']||0}</b>`;
 
       adminTable(lastAdminRows);
     }catch(e){

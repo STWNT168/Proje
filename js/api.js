@@ -65,6 +65,7 @@
 
     pushAdminArticlesToMaster:(date,articleKeys)=>req('POST','pushArticleStatusToMaster',{
       record:{date,articleKeys}
-    })
+    }),
+    updateArticleMaster:r=>req('POST','updateArticleMaster',{record:r})
   };
 })();
