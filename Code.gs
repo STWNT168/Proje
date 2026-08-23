@@ -533,48 +533,119 @@ function spmArticles(p,s){
     totalSourceArticles:rows.length,
     diagnostic:diagnostic
   });
-}
+}function updateArticleStatus(x, s) {
+  const a = auth(s);
 
-function updateArticleStatus(x,s){
-  let a=auth(s);
-  if(a.role!==ROLE.SPM) throw Error('Only SPM users can update article status.');
+  if (a.role !== ROLE.SPM) {
+    throw Error('Only SPM users can update article status.');
+  }
 
-  let d=String(x?.date||today());
-  let key=String(x?.articleKey||x?.pmvApplicationNumber||x?.barCodeId||'').trim();
-  let status=String(x?.status||'').trim();
-  let remarks=String(x?.remarks||'').trim();
+  const d = String(x?.date || today());
+  const key = String(
+    x?.articleKey ||
+    x?.pmvApplicationNumber ||
+    x?.barCodeId ||
+    ''
+  ).trim();
 
-  let allowed=['Pending','Delivered','Redirected','RTS / Return','Not Received','Other'];
-  if(!allowed.includes(status)) throw Error('Invalid article status.');
+  const status = String(x?.status || '').trim();
+  const remarks = String(x?.remarks || '').trim();
 
-  /*
-   * Find in AUTO source so status can also be updated for an
-   * article coming from ARTICLE_MASTER_IMPORT or another
-   * compatible source.
-   */
-  let r=articleRowsForSource('auto').find(z=>articleKey(z)===key);
-  if(!r) throw Error('Article not found in the detected article sources.');
-
-  let pins=assignedPincodes(a.user.OFFICE_ID);
-  if(!pins.includes(normalizePin(r.ARTISAN_PIN_CODE)))
-    throw Error('This article is outside your assigned pincode list.');
-
-  let sh=sheet(S.AS);
-  let old=read(S.AS).find(z=>date(z.DATE)===d&&String(z.ARTICLE_KEY||'')===key);
-
-  let row=[
-    d,key,String(r.BAR_CODE_ID||''),String(r.PMV_APPLICATION_NUMBER||''),
-    String(a.user.OFFICE_ID||''),String(a.user.OFFICE_NAME||''),
-    String(a.user.USER_ID||''),String(a.user.NAME||''),status,remarks,new Date()
+  const allowed = [
+    'Pending',
+    'Delivered',
+    'Redirected',
+    'RTS / Return',
+    'Not Received',
+    'Other'
   ];
 
-  if(old) sh.getRange(old.__row,1,1,row.length).setValues([row]);
-  else sh.appendRow(row);
+  if (!key) {
+    throw Error('Article key is required.');
+  }
 
-  audit(a.user.USER_ID,'ARTICLE_STATUS',d+' | '+key+' | '+status);
+  if (!allowed.includes(status)) {
+    throw Error('Invalid article status.');
+  }
+
+  // Read from both article sources
+  const rows = articleRowsForSource('auto');
+
+  const article = rows.find(r => articleKey(r) === key);
+
+  if (!article) {
+    throw Error('Article not found in article master.');
+  }
+
+  // IMPORTANT:
+  // SPM can update ONLY articles belonging to his/her assigned PIN.
+  const assignedPins = assignedPincodes(a.user.OFFICE_ID);
+
+  const articlePin = normalizePin(article.ARTISAN_PIN_CODE);
+
+  if (!assignedPins.includes(articlePin)) {
+    throw Error(
+      'You are not authorized to update this article. ' +
+      'Article PIN ' + articlePin +
+      ' is outside your assigned PIN codes.'
+    );
+  }
+
+  const sh = sheet(S.AS);
+
+  // Find today's existing status
+  const existing = read(S.AS).find(r =>
+    date(r.DATE) === d &&
+    String(r.ARTICLE_KEY || '').trim() === key
+  );
+
+  const row = [
+    d,
+    key,
+    String(article.BAR_CODE_ID || ''),
+    String(article.PMV_APPLICATION_NUMBER || ''),
+    String(a.user.OFFICE_ID || ''),
+    String(a.user.OFFICE_NAME || ''),
+    String(a.user.USER_ID || ''),
+    String(a.user.NAME || ''),
+    status,
+    remarks,
+    new Date()
+  ];
+
+  if (existing) {
+    sh.getRange(
+      existing.__row,
+      1,
+      1,
+      row.length
+    ).setValues([row]);
+  } else {
+    sh.appendRow(row);
+  }
+
+  SpreadsheetApp.flush();
+
+  audit(
+    a.user.USER_ID,
+    'ARTICLE_STATUS',
+    d +
+    ' | ARTICLE=' + key +
+    ' | STATUS=' + status +
+    ' | REMARKS=' + remarks
+  );
+
   return ok({
-    articleKey:key,status,remarks,date:d,dataSource:String(r.__sheet||'')
-  },'Article status updated.');
+    success: true,
+    articleKey: key,
+    status: status,
+    remarks: remarks,
+    date: d,
+    officeId: String(a.user.OFFICE_ID || ''),
+    officeName: String(a.user.OFFICE_NAME || ''),
+    updatedBy: String(a.user.USER_ID || ''),
+    dataSource: String(article.__sheet || '')
+  }, 'Article status updated successfully.');
 }
 
 function adminArticleStatus(p,s){
