@@ -1,76 +1,192 @@
-/* PMV TOOLKIT TRACKER — ARTICLE DASHBOARD — FULL REPLACEMENT */
-(()=> {
-  'use strict';
-  let spm=[],admin=[];
-  const $=id=>document.getElementById(id);
-  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
-  const notice=(id,m,b)=>{if($(id)){$(id).textContent=m||'';$(id).className='notice'+(b?' '+b:'')}};
-  const statusOptions=['Pending','Delivered','Redirected','RTS / Return','Not Received','Other'];
+(()=>{
+  const $=id=>document.getElementById(id),
+        esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),
+        statuses=['Pending','Delivered','Redirected','RTS / Return','Not Received','Other'];
 
-  function statusCell(r,adminMode){
-    const current=String(r.presentStatus||r.status||'Pending')||'Pending';
-    if(!adminMode)return `<span class="pill ${current==='Pending'?'amber':'green'}">${esc(current)}</span>`;
-    return `<select class="article-master-status" data-key="${esc(r.articleKey||r.barCodeId||r.pmvApplicationNumber)}">${statusOptions.map(s=>`<option ${s===current?'selected':''}>${esc(s)}</option>`).join('')}</select>`;
+  const mobile=x=>String(x||'').replace(/(\d{2})\d{6}(\d{2})/,'$1******$2');
+
+  let lastSpmRows=[];
+
+  const opts=v=>statuses.map(x=>
+    `<option value="${esc(x)}" ${x===v?'selected':''}>${esc(x)}</option>`
+  ).join('');
+
+  function currentFilter(){
+    return String($('article-status-filter')?.value||'All');
   }
-  function rows(data,adminMode){
-    return data.map((r,i)=>`<tr>
-      <td>${i+1}</td><td>${esc(r.barCodeId)}</td><td>${esc(r.pmvApplicationNumber)}</td>
-      <td>${esc(r.artisanName)}</td><td>${esc(r.mobileNumber)}</td><td>${esc(r.pinCode)}</td>
-      <td>${esc(r.officeName)}</td><td>${esc(r.deliveryStaff)}</td><td>${statusCell(r,adminMode)}</td>
-      <td>${esc(r.remarks)}</td><td>${esc(r.updatedAt)}</td>
-      ${adminMode?'<td><button type="button" class="btn btn-primary btn-small article-master-save">SAVE</button></td>':''}
-    </tr>`).join('');
+
+  function filtered(rows){
+    const f=currentFilter();
+    return f==='All' ? rows : rows.filter(r=>String(r.presentStatus||'Pending')===f);
   }
-  function renderSpm(){
-    const t=$('spmArticles'); if(!t)return;
-    const h=['#','Barcode','PMV Application','Artisan','Mobile','PIN','Office','Delivery Staff','Present Status','Remarks','Updated'];
-    t.innerHTML='<thead><tr>'+h.map(x=>`<th>${x}</th>`).join('')+'</tr></thead><tbody>'+rows(spm,false)+'</tbody>';
+
+  function spmTable(rows){
+    const view=filtered(rows);
+    lastSpmRows=view;
+
+    $('spmArticles').innerHTML=
+      '<thead><tr><th>Barcode</th><th>PMV Application</th><th>Artisan</th><th>PIN</th><th>Source Status</th><th>Present Status</th><th>Remarks</th><th>Action</th></tr></thead>'+
+      '<tbody>'+
+      view.map(r=>`<tr>
+        <td>${esc(r.barCodeId)}</td>
+        <td>${esc(r.pmvApplicationNumber)}</td>
+        <td><strong>${esc(r.artisanName)}</strong><small>${mobile(r.mobileNumber)}</small></td>
+        <td>${esc(r.pinCode)}</td>
+        <td>${esc(r.sourceStatus)}</td>
+        <td><select data-key="${esc(r.articleKey)}" class="article-status">${opts(r.presentStatus)}</select></td>
+        <td><input data-key="${esc(r.articleKey)}" class="article-remarks" value="${esc(r.remarks)}" placeholder="Remarks"></td>
+        <td><button type="button" class="btn btn-primary article-save" data-key="${esc(r.articleKey)}">SAVE</button></td>
+      </tr>`).join('')+
+      '</tbody>';
+
+    document.querySelectorAll('.article-save').forEach(
+      b=>b.onclick=()=>saveSpm(b.dataset.key)
+    );
+
+    const scope=$('article-scope');
+    if(scope){
+      const total=rows.length;
+      scope.textContent += ` · Showing ${view.length} ${currentFilter()} article(s)`;
+      if(!total) scope.textContent += ' · No articles found';
+    }
   }
-  function renderAdmin(){
-    const t=$('adminArticles');if(!t)return;
-    const h=['#','Barcode','PMV Application','Artisan','Mobile','PIN','Office','Delivery Staff','Present Status','Remarks','Updated','Action'];
-    t.innerHTML='<thead><tr>'+h.map(x=>`<th>${x}</th>`).join('')+'</tr></thead><tbody>'+rows(admin,true)+'</tbody>';
+
+  async function saveSpm(key){
+    const st=document.querySelector(`.article-status[data-key="${CSS.escape(key)}"]`);
+    const rm=document.querySelector(`.article-remarks[data-key="${CSS.escape(key)}"]`);
+    const date=$('spm-date').value;
+
+    try{
+      await PMVApi.updateArticleStatus({
+        date,
+        articleKey:key,
+        status:st.value,
+        remarks:rm.value
+      });
+      toast('Article status updated.');
+      await loadSpm();
+    }catch(e){
+      toast(e.message,1);
+    }
   }
-  function filter(data,q,status){
-    q=String(q||'').trim().toLowerCase();
-    return data.filter(r=>{
-      const text=[r.barCodeId,r.pmvApplicationNumber,r.artisanName,r.mobileNumber,r.pinCode,r.officeName].join(' ').toLowerCase();
-      return (!q||text.includes(q))&&(!status||status==='All'||String(r.presentStatus||'Pending')===status);
-    });
-  }
+
   async function loadSpm(){
     try{
-      const d=$('spm-date')?.value||PMVApi.todayIndia(),q=$('article-search')?.value||'';
-      spm=await PMVApi.articles(d,q)||[];
-      const f=filter(spm,q,$('article-status-filter')?.value||'All');renderSpm();
-      if($('article-scope'))notice('article-scope',`${f.length} of ${spm.length} articles loaded for your assigned PIN codes.`);
-    }catch(e){notice('article-scope',e.message,true)}
+      const d=$('spm-date').value;
+      const q=$('article-search').value.trim();
+      const x=await PMVApi.articles(d,q);
+
+      window.__spmArticleRows=x.articles||[];
+
+      $('article-scope').textContent=
+        `Office: ${x.officeName||''} · Assigned PIN codes: ${(x.pincodes||[]).join(', ')||'Not configured'} · ${x.totalVisible||0} articles visible`;
+
+      spmTable(window.__spmArticleRows);
+    }catch(e){
+      $('article-scope').textContent=e.message;
+      toast(e.message,1);
+    }
   }
+
+  function csvEscape(v){
+    const s=String(v??'');
+    return `"${s.replace(/"/g,'""')}"`;
+  }
+
+  function exportCsv(){
+    const rows=filtered(window.__spmArticleRows||[]);
+    if(!rows.length){
+      toast('No articles available for export.',1);
+      return;
+    }
+
+    const headers=[
+      'Article Key','Barcode ID','PMV Application Number','Artisan Name',
+      'Mobile Number','Address','Circle','Division','PIN Code',
+      'Delivery Staff','Source Status','Present Status','Remarks','Updated At'
+    ];
+
+    const lines=[headers.map(csvEscape).join(',')];
+
+    rows.forEach(r=>{
+      lines.push([
+        r.articleKey,r.barCodeId,r.pmvApplicationNumber,r.artisanName,
+        r.mobileNumber,r.address,r.circleName,r.divisionName,r.pinCode,
+        r.deliveryStaff,r.sourceStatus,r.presentStatus,r.remarks,r.updatedAt
+      ].map(csvEscape).join(','));
+    });
+
+    const blob=new Blob(
+      ['\ufeff'+lines.join('\r\n')],
+      {type:'text/csv;charset=utf-8;'}
+    );
+
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    const d=$('spm-date').value||'date';
+    const f=currentFilter().replace(/[^a-z0-9]+/gi,'_').replace(/^_|_$/g,'')||'All';
+
+    a.href=url;
+    a.download=`PMV_Articles_${d}_${f}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function adminTable(rows){
+    $('adminArticles').innerHTML=
+      '<thead><tr><th>Barcode</th><th>PMV Application</th><th>Artisan</th><th>PIN</th><th>Office</th><th>SPM</th><th>Present Status</th><th>Remarks</th><th>Updated</th></tr></thead>'+
+      '<tbody>'+
+      rows.map(r=>`<tr>
+        <td>${esc(r.barCodeId)}</td>
+        <td>${esc(r.pmvApplicationNumber)}</td>
+        <td>${esc(r.artisanName)}<small>${mobile(r.mobileNumber)}</small></td>
+        <td>${esc(r.pinCode)}</td>
+        <td>${esc(r.officeName)}</td>
+        <td>${esc(r.spmName)}<small>${esc(r.spmId)}</small></td>
+        <td><i class="pill ${r.presentStatus==='Delivered'?'green':'amber'}">${esc(r.presentStatus)}</i></td>
+        <td>${esc(r.remarks)}</td>
+        <td>${esc(r.updatedAt)}</td>
+      </tr>`).join('')+
+      '</tbody>';
+  }
+
   async function loadAdminArticles(){
     try{
-      const d=$('admin-date')?.value||PMVApi.todayIndia(),q=$('admin-article-search')?.value||'';
-      admin=await PMVApi.adminArticles(d,q)||[];
-      renderAdmin();
-      if($('admin-article-status'))notice('admin-article-status',`${admin.length} articles loaded. Office and Present Status are resolved independently of daily status rows.`);
-    }catch(e){notice('admin-article-status',e.message,true)}
+      let d=$('admin-date').value,
+          q=$('admin-article-search').value.trim(),
+          x=await PMVApi.adminArticles(d,q);
+
+      $('admin-article-status').textContent=
+        `${x.total||0} records shown · ${x.updatedCount||0} status updates for ${d}.`;
+
+      adminTable(x.articles||[]);
+    }catch(e){
+      $('admin-article-status').textContent=e.message;
+      toast(e.message,1);
+    }
   }
-  async function saveMaster(btn){
-    const tr=btn.closest('tr'),select=tr?.querySelector('.article-master-status');if(!select)return;
-    const key=select.dataset.key;
-    const r=admin.find(x=>String(x.articleKey||x.barCodeId||x.pmvApplicationNumber)===String(key));
-    if(!r)return toast('Article record not found.',1);
-    btn.disabled=true;btn.textContent='SAVING…';
-    try{const x=await PMVApi.updateArticleMasterStatus({articleKey:r.articleKey,barCodeId:r.barCodeId,pmvApplicationNumber:r.pmvApplicationNumber,status:select.value,remarks:r.remarks||''});toast(x.message||'Master status updated.');await loadAdminArticles()}
-    catch(e){toast(e.message,1)}
-    finally{btn.disabled=false;btn.textContent='SAVE'}
-  }
+
   function bind(){
     $('article-fetch')?.addEventListener('click',loadSpm);
-    $('article-search')?.addEventListener('input',()=>renderSpm());
-    $('article-status-filter')?.addEventListener('change',()=>{const q=$('article-search')?.value||'';const f=filter(spm,q,$('article-status-filter').value);const old=spm;spm=f;renderSpm();spm=old});
+    $('article-search')?.addEventListener('keydown',e=>{
+      if(e.key==='Enter')loadSpm();
+    });
+    $('spm-date')?.addEventListener('change',loadSpm);
+
+    $('article-status-filter')?.addEventListener('change',()=>{
+      spmTable(window.__spmArticleRows||[]);
+    });
+
+    $('article-export-csv')?.addEventListener('click',exportCsv);
+
     $('admin-article-fetch')?.addEventListener('click',loadAdminArticles);
-    $('admin-article-search')?.addEventListener('input',loadAdminArticles);
-    $('adminArticles')?.addEventListener('click',e=>{const b=e.target.closest('.article-master-save');if(b)saveMaster(b)});
+    $('admin-article-search')?.addEventListener('keydown',e=>{
+      if(e.key==='Enter')loadAdminArticles();
+    });
+    $('admin-date')?.addEventListener('change',loadAdminArticles);
   }
-  window.PMVArticles={bind,loadSpm,loadAdminArticles};
+
+  window.PMVArticles={bind,loadSpm,loadAdminArticles,exportCsv};
 })();
