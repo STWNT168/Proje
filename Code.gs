@@ -749,7 +749,9 @@ function spmArticles(params, session) {
       officeId: String(a.user.OFFICE_ID || ''),
       officeName: String(a.user.OFFICE_NAME || ''),
       assignedPincodes: [],
+      pincodes: [],
       count: 0,
+      totalVisible: 0,
       articles: [],
       message: 'No PIN codes are configured for this office.'
     });
@@ -765,7 +767,7 @@ function spmArticles(params, session) {
     return articleClient(r, statuses[articleKey(r)], r.__sheet);
   });
 
-  var search = String(params.search || '').trim().toLowerCase();
+  var search = String(params.search || params.q || '').trim().toLowerCase();
 
   if (search) {
     articles = articles.filter(function(a1) {
@@ -786,8 +788,10 @@ function spmArticles(params, session) {
     officeId: String(a.user.OFFICE_ID || ''),
     officeName: String(a.user.OFFICE_NAME || ''),
     assignedPincodes: pins,
+    pincodes: pins,
     source: source,
     count: articles.length,
+    totalVisible: articles.length,
     articles: articles
   });
 }
@@ -815,7 +819,7 @@ function adminArticleStatus(params, session) {
   var filterOffice = String(params.officeId || '').trim();
   var filterPin = normalizePin(params.pinCode);
   var filterStatus = String(params.status || '').trim().toLowerCase();
-  var search = String(params.search || '').trim().toLowerCase();
+  var search = String(params.search || params.q || '').trim().toLowerCase();
 
   var articles = rows.map(function(r) {
     return articleClient(r, statuses[articleKey(r)], r.__sheet);
@@ -859,6 +863,7 @@ function adminArticleStatus(params, session) {
     date: d,
     source: source,
     count: articles.length,
+    total: articles.length,
     summary: summary,
     articles: articles
   });
