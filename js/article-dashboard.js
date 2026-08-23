@@ -79,11 +79,26 @@
       const x=await PMVApi.articles(d,q);
 
       window.__spmArticleRows=Array.isArray(x.articles)?x.articles:[];
-      window.__spmArticleMeta={
-        officeName:x.officeName||'',
-        pincodes:Array.isArray(x.pincodes)?x.pincodes:
-                 (Array.isArray(x.assignedPincodes)?x.assignedPincodes:[])
-      };
+      const returnedPins =
+  Array.isArray(x.pincodes) ? x.pincodes :
+  Array.isArray(x.assignedPincodes) ? x.assignedPincodes :
+  Array.isArray(x.officePincodes) ? x.officePincodes :
+  Array.isArray(x.PINCODES) ? x.PINCODES :
+  [];
+
+window.__spmArticleMeta = {
+  officeName: String(
+    x.officeName ||
+    x.OFFICE_NAME ||
+    x.office ||
+    ''
+  ),
+  pincodes: [...new Set(
+    returnedPins
+      .map(v => String(v ?? '').replace(/\D/g, ''))
+      .filter(Boolean)
+  )]
+};
 
       spmTable(window.__spmArticleRows);
 
