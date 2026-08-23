@@ -1,4 +1,4 @@
-const CACHE_NAME = "pmv-toolkit-v1";
+const CACHE_NAME = "pmv-toolkit-v3";
 const APP_SHELL = [
   "./",
   "./index.html",

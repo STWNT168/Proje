@@ -1,9 +1,10 @@
 <!doctype html>
 <html lang="en">
-<head><link rel="manifest" href="./manifest.json">
-<meta name="theme-color" content="#0b5ed7">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
+<head>
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#0b5ed7">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b466b"><meta name="description" content="PMV Toolkit daily reporting and monitoring">
 <title>PMV Toolkit Tracker</title><link rel="stylesheet" href="styles.css">
@@ -18,7 +19,7 @@
 <section id="loginView" class="login-wrap">
   <div class="login-card">
     <div class="eyebrow">PMV TOOLKIT</div><h1>Daily Reporting Portal</h1>
-    <p class="muted"> Udhampur Division.</p>
+    <p class="muted">Simple, secure and ready for future PWA use.</p>
     <label>User ID<input id="uid" autocomplete="username" inputmode="numeric" placeholder="Enter User ID"></label>
     <label>Registered Mobile Number<input id="mobile" type="tel" autocomplete="tel" inputmode="numeric" placeholder="Enter registered mobile"></label>
     <button id="login" class="btn btn-primary btn-wide">SIGN IN</button><div id="loginMsg" class="notice"></div>
@@ -60,6 +61,17 @@
 
     <div class="validation-card"><strong>Validation</strong><p id="validation">Validation pending.</p></div>
     <button class="btn btn-primary btn-submit" type="submit">SUBMIT DAILY REPORT</button>
+
+    <div class="section-card article-card">
+      <div class="section-title"><span>3</span> Article-wise Daily Status</div>
+      <div class="table-note">You can see only articles mapped to your office's PIN codes. Search by barcode, PMV application number, artisan name or PIN code.</div>
+      <div class="article-tools">
+        <input id="article-search" type="search" placeholder="Search barcode / PMV application / artisan / PIN code">
+        <button id="article-fetch" type="button" class="btn btn-primary">FETCH ARTICLES</button>
+      </div>
+      <div id="article-scope" class="notice"></div>
+      <div class="table-wrap"><table id="spmArticles"></table></div>
+    </div>
   </form>
 </section>
 
@@ -69,20 +81,28 @@
   <div class="dashboard-section"><div class="section-heading"><h2>Daily Movement Summary</h2><p>Came today, delivered, redirect and RTS — Kits and Articles shown separately.</p></div><div id="stats" class="stats"></div></div>
   <div class="dashboard-section"><div class="section-heading"><h2>SPM-wise Complete Details</h2><p>All submitted and non-updated SPM fields for the selected date.</p></div><div class="table-wrap"><table id="spmWise"></table></div></div>
   <div class="dashboard-section"><div class="section-heading"><h2>Office-wise Consolidated Report</h2><p>Opening → Came Today → Redirect → RTS → Delivered → Closing.</p></div><div class="table-wrap"><table id="office"></table></div></div>
+
+  <div class="dashboard-section"><div class="section-heading"><h2>Article-wise Daily Status</h2><p>Admin/DPS can view article details and the present status updated by each SPM.</p></div>
+    <div class="article-tools"><input id="admin-article-search" type="search" placeholder="Search barcode / PMV application / artisan / PIN code"><button id="admin-article-fetch" class="btn btn-primary">FETCH</button></div>
+    <div id="admin-article-status" class="notice"></div>
+    <div class="table-wrap"><table id="adminArticles"></table></div>
+  </div>
+
   <div class="dashboard-section"><div class="section-heading"><h2>SPMs Who Have Not Updated</h2><p>Active SPMs without a report for the selected date.</p></div><div class="table-wrap"><table id="pending"></table></div></div>
 </section>
 </main>
-<footer>PMV Toolkit Tracker · Udhampur Division </footer>
+<footer>PMV Toolkit Tracker · Udhampur Division · Designed for future PWA conversion</footer>
 <div id="toast" class="toast"></div>
-<script src="js/config.js"></script><script src="js/api.js"></script><script src="js/auth.js"></script><script src="js/calculations.js"></script><script src="js/validation.js"></script><script src="js/spm-dashboard.js"></script><script src="js/admin-dashboard.js"></script><script src="js/app.js"></script><script>
+<script src="js/config.js"></script><script src="js/api.js"></script><script src="js/auth.js"></script><script src="js/calculations.js"></script><script src="js/validation.js"></script><script src="js/spm-dashboard.js"></script><script src="js/admin-dashboard.js"></script><script src="js/article-dashboard.js"></script><script src="js/app.js"></script>
+
+<script>
 if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./service-worker.js")
-            .then(() => console.log("Service worker registered"))
-            .catch(error => console.error("Service worker registration failed:", error));
+        navigator.serviceWorker.register("./service-worker.js?v=3")
+            .then(() => console.log("PMV Toolkit service worker registered"))
+            .catch((error) => console.error("Service worker registration failed:", error));
     });
 }
 </script>
-<div class="designed-by">Designed by SM v1</div>
-</body>
-</html>
+
+</body></html>
