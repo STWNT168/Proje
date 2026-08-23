@@ -595,7 +595,106 @@ function updateArticleStatus(x,s){
     articleKey:key,status,remarks,date:d,dataSource:String(r.__sheet||'')
   },'Article status updated.');
 }
+function updateArticleMasterStatus(x,s){
 
+  let a=auth(s);
+
+  if(![ROLE.ADMIN,ROLE.DPS].includes(a.role)){
+    throw Error('Only Admin/DPS can update ARTICLE_MASTER.');
+  }
+
+  let key=String(
+    x?.articleKey ||
+    x?.pmvApplicationNumber ||
+    x?.barCodeId ||
+    ''
+  ).trim();
+
+  let status=String(
+    x?.status || ''
+  ).trim();
+
+  if(!key){
+    throw Error('Article key is required.');
+  }
+
+  if(!status){
+    throw Error('Status is required.');
+  }
+
+  let allowed=[
+    'Pending',
+    'Delivered',
+    'Redirected',
+    'RTS / Return',
+    'Not Received',
+    'Other'
+  ];
+
+  if(!allowed.includes(status)){
+    throw Error('Invalid article status.');
+  }
+
+  let sh=sheet('ARTICLE_MASTER');
+
+  let rows=read('ARTICLE_MASTER');
+
+  let row=rows.find(r =>
+    String(r.PMV_APPLICATION_NUMBER||'').trim()===key ||
+    String(r.BAR_CODE_ID||'').trim()===key
+  );
+
+  if(!row){
+    throw Error(
+      'Article not found in ARTICLE_MASTER.'
+    );
+  }
+
+  let oldStatus=String(
+    row.TOOLKIT_DELIVERY_STATUS||''
+  );
+
+  let headers=sh
+    .getRange(
+      1,
+      1,
+      1,
+      sh.getLastColumn()
+    )
+    .getValues()[0];
+
+  let statusCol=
+    headers.indexOf(
+      'TOOLKIT_DELIVERY_STATUS'
+    )+1;
+
+  if(statusCol<=0){
+    throw Error(
+      'TOOLKIT_DELIVERY_STATUS column not found in ARTICLE_MASTER.'
+    );
+  }
+
+  sh.getRange(
+    row.__row,
+    statusCol
+  ).setValue(status);
+
+  audit(
+    a.user.USER_ID,
+    'ARTICLE_MASTER_STATUS_UPDATE',
+    key+
+    ' | Previous: '+oldStatus+
+    ' | New: '+status
+  );
+
+  return ok({
+    articleKey:key,
+    previousStatus:oldStatus,
+    newStatus:status,
+    updatedBy:String(a.user.USER_ID),
+    updatedAt:new Date().toISOString()
+  },'ARTICLE_MASTER updated successfully.');
+}
 function adminArticleStatus(p,s){
   let a=auth(s);
   if(![ROLE.ADMIN,ROLE.DPS].includes(a.role))
