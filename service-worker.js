@@ -18,7 +18,7 @@ self.addEventListener('fetch',e=>{
   const u=new URL(e.request.url);
   if(u.origin!==location.origin)return;
 
-  // Never serve stale application JS. This is important for V14 session fixes.
+  // Never serve stale application JS. This is important for V14.2 session fixes.
   if(/\/js\/(api|auth|app|article-dashboard)\.js$|\/config\.js$/.test(u.pathname)){
     e.respondWith(
       fetch(e.request,{cache:'no-store'}).catch(()=>caches.match(e.request))

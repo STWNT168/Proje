@@ -331,10 +331,58 @@ function canonicalStatus_(v){
   return clean_(v);
 }
 function articleStatusDate_(r){return dateOnly_(r.DATE||r.STATUS_DATE||r.STATUSDATE||r.UPDATED_DATE||r.UPDATED_AT);}
-function articleStatusKey_(r){return clean_(r.ARTICLE_KEY||r.ARTICLEKEY||r.BARCODE_ID||r.BARCODE||r.ARTICLE_ID||r.ARTICLE_NUMBER||r.PMV_APPLICATION_NUMBER||r.PMV_APPLICATION_NO);}
+function articleStatusKeys_(r){
+  const vals = [
+    r.ARTICLE_KEY,r.ARTICLEKEY,r.BARCODE_ID,r.BARCODE,r.ARTICLE_ID,
+    r.ARTICLE_NUMBER,r.ARTICLE_NO,r.TRACKING_NUMBER,r.TRACKING_NO,
+    r.PMV_APPLICATION_NUMBER,r.PMV_APPLICATION_NO,r.PMV_APPLICATION,
+    r.APPLICATION_NUMBER,r.APPLICATION_NO
+  ];
+  const out=[];
+  vals.forEach(v=>{
+    const s=clean_(v);
+    if(!s)return;
+    const u=upper_(s);
+    if(!out.includes(u))out.push(u);
+    const d=digits_(s);
+    if(d && !out.includes(d))out.push(d);
+  });
+  return out;
+}
+function articleStatusKey_(r){
+  const keys=articleStatusKeys_(r);
+  return keys.length?keys[0]:'';
+}
 function buildArticleStatusMap_(rows,date){
   const map={};
-  rows.forEach(r=>{const rd=articleStatusDate_(r);if(rd&&rd!==date)return;const k=upper_(articleStatusKey_(r));if(!k)return;const old=map[k];const stamp=clean_(r.UPDATED_AT||r.STATUS_UPDATED_AT);if(!old||stamp>=old._stamp)map[k]={presentStatus:clean_(r.PRESENT_STATUS||r.STATUS||r.ARTICLE_STATUS||r.CURRENT_STATUS),remarks:clean_(r.REMARKS||r.STATUS_REMARKS||r.REMARK),spmId:clean_(r.UPDATED_BY||r.SPM_ID||r.USER_ID),officeName:clean_(r.OFFICE_NAME||r.OFFICE),updatedAt:stamp,reviewStatus:clean_(r.REVIEW_STATUS||r.AUTHORIZATION_STATUS||r.AUTHORISATION_STATUS),authorisedBy:clean_(r.AUTHORISED_BY||r.AUTHORIZED_BY),authorisedAt:clean_(r.AUTHORISED_AT||r.AUTHORIZED_AT),_stamp:stamp};});
+  rows.forEach((r,rowIndex)=>{
+    const rd=articleStatusDate_(r);
+    if(rd && date && rd!==date)return;
+    const keys=articleStatusKeys_(r);
+    if(!keys.length)return;
+
+    const rawStamp=clean_(r.UPDATED_AT||r.STATUS_UPDATED_AT||r.AUTHORISED_AT||'');
+    const stamp=rawStamp || (rd||'') || String(rowIndex).padStart(10,'0');
+    const item={
+      presentStatus:clean_(r.PRESENT_STATUS||r.STATUS||r.ARTICLE_STATUS||r.CURRENT_STATUS||r.DELIVERY_STATUS),
+      remarks:clean_(r.REMARKS||r.STATUS_REMARKS||r.REMARK||r.COMMENTS),
+      spmId:clean_(r.UPDATED_BY||r.SPM_ID||r.USER_ID||r.UPDATED_BY_USER),
+      officeName:clean_(r.OFFICE_NAME||r.OFFICE),
+      updatedAt:rawStamp,
+      reviewStatus:clean_(r.REVIEW_STATUS||r.AUTHORIZATION_STATUS||r.AUTHORISATION_STATUS||r.REVIEW),
+      authorisedBy:clean_(r.AUTHORISED_BY||r.AUTHORIZED_BY),
+      authorisedAt:clean_(r.AUTHORISED_AT||r.AUTHORIZED_AT),
+      _stamp:stamp,
+      _rowIndex:rowIndex
+    };
+
+    keys.forEach(k=>{
+      const old=map[k];
+      if(!old || item._stamp>old._stamp || (item._stamp===old._stamp && item._rowIndex>old._rowIndex)){
+        map[k]=item;
+      }
+    });
+  });
   return map;
 }
 function mergeArticle_(master,status){
@@ -342,6 +390,7 @@ function mergeArticle_(master,status){
   r.articleKey=articleKey_(master);r.barCodeId=clean_(articleField_(master,'BARCODE_ID'));r.pmvApplicationNumber=clean_(articleField_(master,'PMV_APPLICATION_NUMBER'));r.artisanName=clean_(articleField_(master,'ARTISAN_NAME'));r.mobileNumber=clean_(articleField_(master,'MOBILE_NUMBER'));r.address=clean_(articleField_(master,'ADDRESS'));r.circleName=clean_(articleField_(master,'CIRCLE_NAME'));r.divisionName=clean_(articleField_(master,'DIVISION_NAME'));r.pinCode=articlePin_(master);r.deliveryStaff=clean_(articleField_(master,'DELIVERY_STAFF'));
   r.presentStatus=canonicalStatus_(status&&status.presentStatus||articleField_(master,'PRESENT_STATUS')||'Pending');
   r.masterStatus=canonicalStatus_(articleField_(master,'PRESENT_STATUS')||'Pending');
+  r.statusSource=status?'ARTICLE_STATUS':'ARTICLE_MASTER';
   r.remarks=status?status.remarks:clean_(articleField_(master,'REMARKS'));r.spmId=status?status.spmId:'';r.spmName=status?status.spmId:'';r.officeName=status?status.officeName:clean_(master.OFFICE_NAME||master.OFFICE);r.updatedAt=status?status.updatedAt:'';r.reviewStatus=status?status.reviewStatus:'';r.authorisedBy=status?status.authorisedBy:'';r.authorisedAt=status?status.authorisedAt:'';
   return r;
 }
@@ -373,19 +422,39 @@ function getSpmArticles_(session,date,search,limit){
 function getAdminArticleStatus_(session,date,search,limit){
   const master=readSheetObjects_(CONFIG.SHEETS.ARTICLE_MASTER),status=readSheetObjects_(CONFIG.SHEETS.ARTICLE_STATUS,true),map=buildArticleStatusMap_(status,date),articles=[];
   for(const row of master){const key=articleKey_(row);if(!key)continue;const merged=mergeArticle_(row,map[upper_(key)]||null);if(search&&!articleMatchesSearch_(merged,search))continue;articles.push(merged);if(limit>0&&articles.length>=limit)break;}
-  return {date,articles,total:articles.length,counts:countArticleStatuses_(articles),diagnostics:{masterRows:master.length,statusRows:status.length}};
+  const matchedStatus=articles.filter(a=>a.statusSource==='ARTICLE_STATUS').length;
+  return {
+    date,articles,total:articles.length,counts:countArticleStatuses_(articles),
+    diagnostics:{masterRows:master.length,statusRows:status.length,matchedStatusRows:matchedStatus}
+  };
 }
 function findArticleByKey_(key){
-  const t=upper_(key),rows=readSheetObjects_(CONFIG.SHEETS.ARTICLE_MASTER);
-  return rows.find(r=>upper_(articleKey_(r))===t)||null;
+  const wanted=new Set(articleStatusKeys_({ARTICLE_KEY:key}));
+  const rows=readSheetObjects_(CONFIG.SHEETS.ARTICLE_MASTER);
+  return rows.find(r=>articleStatusKeys_(r).some(k=>wanted.has(k)))||null;
 }
 function findArticleRowNumber_(key){
-  const sh=getSheet_(CONFIG.SHEETS.ARTICLE_MASTER),data=sh.getDataRange().getValues();if(data.length<2)return 0;const hs=data[0].map(normHeader_),t=upper_(key);
-  for(let i=1;i<data.length;i++){const r={};for(let c=0;c<hs.length;c++)r[hs[c]]=data[i][c];if(upper_(articleKey_(r))===t)return i+1;}return 0;
+  const wanted=new Set(articleStatusKeys_({ARTICLE_KEY:key}));
+  const sh=getSheet_(CONFIG.SHEETS.ARTICLE_MASTER),data=sh.getDataRange().getValues();
+  if(data.length<2)return 0;
+  const hs=data[0].map(normHeader_);
+  for(let i=1;i<data.length;i++){
+    const r={};for(let c=0;c<hs.length;c++)r[hs[c]]=data[i][c];
+    if(articleStatusKeys_(r).some(k=>wanted.has(k)))return i+1;
+  }
+  return 0;
 }
 function findArticleStatusRow_(key,date){
-  const sh=getSheet_(CONFIG.SHEETS.ARTICLE_STATUS),data=sh.getDataRange().getValues();if(data.length<2)return 0;const hs=data[0].map(normHeader_),t=upper_(key);
-  for(let i=data.length-1;i>=1;i--){const r={};for(let c=0;c<hs.length;c++)r[hs[c]]=data[i][c];const rd=articleStatusDate_(r);if(upper_(articleStatusKey_(r))===t&&(!rd||rd===date))return i+1;}return 0;
+  const wanted=new Set(articleStatusKeys_({ARTICLE_KEY:key}));
+  const sh=getSheet_(CONFIG.SHEETS.ARTICLE_STATUS),data=sh.getDataRange().getValues();
+  if(data.length<2)return 0;
+  const hs=data[0].map(normHeader_);
+  for(let i=data.length-1;i>=1;i--){
+    const r={};for(let c=0;c<hs.length;c++)r[hs[c]]=data[i][c];
+    const rd=articleStatusDate_(r);
+    if(articleStatusKeys_(r).some(k=>wanted.has(k)) && (!rd||!date||rd===date))return i+1;
+  }
+  return 0;
 }
 
 /* ---------- status update and master authorisation ---------- */
@@ -405,7 +474,7 @@ function pushArticleStatusToMaster_(s,r){
   const master=getSheet_(CONFIG.SHEETS.ARTICLE_MASTER),statusSheet=getSheet_(CONFIG.SHEETS.ARTICLE_STATUS),statusRows=readSheetObjects_(CONFIG.SHEETS.ARTICLE_STATUS,true),map=buildArticleStatusMap_(statusRows,date),mh=headerMap_(master.getRange(1,1,1,master.getLastColumn()).getValues()[0]);
   const sc=firstHeader_(mh,['PRESENT_STATUS','STATUS','ARTICLE_STATUS','CURRENT_STATUS']),rc=firstHeader_(mh,['REMARKS','STATUS_REMARKS','REMARK']),ub=firstHeader_(mh,['STATUS_UPDATED_BY','UPDATED_BY']),ua=firstHeader_(mh,['STATUS_UPDATED_AT','UPDATED_AT']);
   let pushed=0,skipped=0;
-  for(const key of keys){const st=map[upper_(key)];if(!st||!st.presentStatus){skipped++;continue;}if(upper_(st.reviewStatus)!=='PENDING_REVIEW'&&upper_(st.reviewStatus)!=='AUTHORISED'&&st.reviewStatus!==''){skipped++;continue;}const row=findArticleRowNumber_(key);if(!row){skipped++;continue;}
+  for(const key of keys){const st=(map[upper_(key)]||map[digits_(key)]);if(!st||!st.presentStatus){skipped++;continue;}if(upper_(st.reviewStatus)!=='PENDING_REVIEW'&&upper_(st.reviewStatus)!=='AUTHORISED'&&st.reviewStatus!==''){skipped++;continue;}const row=findArticleRowNumber_(key);if(!row){skipped++;continue;}
     const sv=canonicalStatus_(st.presentStatus);if(sc!==-1)master.getRange(row,sc+1).setValue(sv);if(rc!==-1)master.getRange(row,rc+1).setValue(st.remarks||'');if(ub!==-1)master.getRange(row,ub+1).setValue(s.userId);if(ua!==-1)master.getRange(row,ua+1).setValue(now_());
     const sr=findArticleStatusRow_(key,date);if(sr){const sh=headerMap_(statusSheet.getRange(1,1,1,statusSheet.getLastColumn()).getValues()[0]);const rr=firstHeader_(sh,['REVIEW_STATUS','AUTHORIZATION_STATUS','AUTHORISATION_STATUS']);const ab=firstHeader_(sh,['AUTHORISED_BY','AUTHORIZED_BY']);const at=firstHeader_(sh,['AUTHORISED_AT','AUTHORIZED_AT']);if(rr!==-1)statusSheet.getRange(sr,rr+1).setValue('AUTHORISED');if(ab!==-1)statusSheet.getRange(sr,ab+1).setValue(s.userId);if(at!==-1)statusSheet.getRange(sr,at+1).setValue(now_());}
     writeAudit_('MASTER_PUSH',s,key,sv,date);pushed++;
@@ -439,6 +508,31 @@ function diagnoseArticleStatus_(session,date){
   return {sheet:CONFIG.SHEETS.ARTICLE_STATUS,totalRows:rows.length,date,statusEntriesForDate:Object.keys(map).length,sample:Object.keys(map).slice(0,10).map(k=>({articleKey:k,status:map[k].presentStatus,review:map[k].reviewStatus}))};
 }
 function testArticleMaster(){const rows=readSheetObjects_(CONFIG.SHEETS.ARTICLE_MASTER);return {success:true,totalArticles:rows.length,sample:rows.slice(0,5).map(r=>({articleKey:articleKey_(r),barcode:articleField_(r,'BARCODE_ID'),pin:articlePin_(r),artisan:articleField_(r,'ARTISAN_NAME')}))};}
+function diagnoseArticleSync_(date,search){
+  const master=readSheetObjects_(CONFIG.SHEETS.ARTICLE_MASTER);
+  const status=readSheetObjects_(CONFIG.SHEETS.ARTICLE_STATUS,true);
+  const map=buildArticleStatusMap_(status,date||today_());
+  const q=clean_(search).toLowerCase();
+  const rows=[];
+  master.forEach(r=>{
+    const merged=mergeArticle_(r,map[upper_(articleKey_(r))]||map[digits_(articleKey_(r))]||null);
+    if(q && !articleMatchesSearch_(merged,q))return;
+    rows.push({
+      articleKey:merged.articleKey,
+      barcode:merged.barCodeId,
+      pmvApplication:merged.pmvApplicationNumber,
+      artisan:merged.artisanName,
+      pin:merged.pinCode,
+      presentStatus:merged.presentStatus,
+      masterStatus:merged.masterStatus,
+      statusSource:merged.statusSource,
+      reviewStatus:merged.reviewStatus,
+      updatedBy:merged.spmId,
+      updatedAt:merged.updatedAt
+    });
+  });
+  return {date:date||today_(),masterRows:master.length,statusRows:status.length,matchedStatusRows:rows.filter(r=>r.statusSource==='ARTICLE_STATUS').length,rows:rows.slice(0,100)};
+}
 function testArticleStatus(){const rows=readSheetObjects_(CONFIG.SHEETS.ARTICLE_STATUS,true);return {success:true,total:rows.length,sample:rows.slice(0,5)};}
 function setupPMVSheets(){
   const ss=getSS_(),defs={DAILY_DATA:DAILY_HEADERS_(),ARTICLE_STATUS:ARTICLE_STATUS_HEADERS_(),SESSIONS:['TOKEN','USER_ID','ROLE','OFFICE_NAME','OFFICE_CODE','ASSIGNED_PINS','CREATED_AT','LAST_ACTIVE'],ARTICLE_AUDIT:['TIMESTAMP','ACTION','USER_ID','ROLE','OFFICE_NAME','ARTICLE_KEY','STATUS','DATE']};
