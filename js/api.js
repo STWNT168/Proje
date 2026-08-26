@@ -256,8 +256,23 @@ async function request(action, params = {}) {
   throw lastError || Error('Request failed.');
 }
 
+
+function todayIndia() {
+  // Return YYYY-MM-DD using Asia/Kolkata, without depending on the
+  // device's local timezone.
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date());
+  const get = t => parts.find(p => p.type === t)?.value || '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
 window.PMVApi = {
   getSession,
+  todayIndia,
   saveSession,
   clearSession,
   login: async (userId, mobile) => saveSession(await request('login', { userId, mobile })),
