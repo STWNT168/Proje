@@ -1,12 +1,10 @@
 (() => {
+  'use strict';
+
   const $ = id => document.getElementById(id);
-  const esc = x => String(x ?? '').replace(/[&<>"']/g, c => ({
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({
     '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
   }[c]));
-  const mobile = x => {
-    const s = String(x || '');
-    return s.replace(/^(\d{2})\d{6}(\d{2})$/, '$1******$2');
-  };
 
   const STATUSES = [
     'Pending', 'Delivered', 'Redirected', 'Return',
@@ -16,7 +14,7 @@
   let spmRows = [];
   let adminRows = [];
 
-  const normStatus = value => {
+  const normalise = value => {
     const s = String(value || '').trim().toLowerCase();
     if (!s) return 'Pending';
     if (s.includes('deliver')) return 'Delivered';
@@ -27,137 +25,177 @@
     return 'Pending';
   };
 
-  const statusOptions = selected => STATUSES.map(s =>
-    `<option value="${esc(s)}" ${normStatus(selected) === s ? 'selected' : ''}>${esc(s)}</option>`
-  ).join('');
-
-  const filterRows = (rows, id) => {
-    const f = String($(id)?.value || 'All');
-    return f === 'All' ? rows : rows.filter(r => normStatus(r.presentStatus) === f);
+  const matches = (row, query) => {
+    const q = String(query || '').trim().toLowerCase();
+    if (!q) return true;
+    // Search every field returned from ARTICLE_MASTER + ARTICLE_STATUS.
+    const haystack = Object.values(row || {}).join(' ').toLowerCase();
+    return q.split(/\s+/).filter(Boolean).every(token => haystack.includes(token));
   };
 
-  function addBulkControls(tableId, type) {
+  const filtered = (rows, filterId, searchId) => {
+    const filter = $(filterId)?.value || 'All';
+    const q = $(searchId)?.value || '';
+    return rows.filter(row =>
+      (filter === 'All' || normalise(row.presentStatus) === filter) &&
+      matches(row, q)
+    );
+  };
+
+  function optionList(value) {
+    return STATUSES.map(s =>
+      `<option value="${esc(s)}" ${normalise(value) === s ? 'selected' : ''}>${esc(s)}</option>`
+    ).join('');
+  }
+
+  function countSelected(tableId, outputId) {
+    const n = $(tableId)?.querySelectorAll('tbody .article-check:checked').length || 0;
+    if ($(outputId)) $(outputId).textContent = `${n} selected`;
+  }
+
+  function selectedKeys(tableId) {
+    return [...($(tableId)?.querySelectorAll('tbody .article-check:checked') || [])]
+      .map(cb => cb.dataset.key)
+      .filter(Boolean);
+  }
+
+  function bindSelectAll(tableId, outputId) {
     const table = $(tableId);
     if (!table) return;
-    const thead = table.querySelector('thead');
-    if (!thead) return;
-    const row = thead.querySelector('tr');
-    if (!row || row.querySelector('.article-select-all')) return;
-    const th = document.createElement('th');
-    th.className = 'article-select-all';
-    th.innerHTML = '<input type="checkbox" aria-label="Select all visible articles">';
-    row.prepend(th);
-    th.querySelector('input').addEventListener('change', e => {
-      table.querySelectorAll('tbody input.article-check').forEach(cb => cb.checked = e.target.checked);
-      updateSelectionCount(type);
-    });
+
+    const all = table.querySelector('.article-select-all');
+    if (all) {
+      all.addEventListener('change', e => {
+        table.querySelectorAll('tbody .article-check')
+          .forEach(cb => cb.checked = e.target.checked);
+        countSelected(tableId, outputId);
+      });
+    }
+
+    table.querySelectorAll('tbody .article-check')
+      .forEach(cb => cb.addEventListener('change', () => countSelected(tableId, outputId)));
   }
 
-  function updateSelectionCount(type) {
-    const tableId = type === 'spm' ? 'spmArticles' : 'adminArticles';
-    const countId = type === 'spm' ? 'spm-selected-count' : 'admin-selected-count';
-    const n = $(tableId)?.querySelectorAll('tbody input.article-check:checked').length || 0;
-    if ($(countId)) $(countId).textContent = `${n} selected`;
+  function summary(rows, targetId) {
+    const counts = Object.fromEntries(STATUSES.map(s => [s, 0]));
+    rows.forEach(r => counts[normalise(r.presentStatus)]++);
+    const target = $(targetId);
+    if (!target) return;
+    target.innerHTML = Object.entries(counts)
+      .map(([name, count]) => `<span class="pill">${esc(name)}: <b>${count}</b></span>`)
+      .join(' ');
   }
 
-  function checkedKeys(type) {
-    const tableId = type === 'spm' ? 'spmArticles' : 'adminArticles';
-    return [...($(tableId)?.querySelectorAll('tbody input.article-check:checked') || [])]
-      .map(x => x.dataset.key).filter(Boolean);
-  }
-
-  function renderSummary(rows, targetId) {
-    const counts = { Pending:0, Delivered:0, Redirected:0, Return:0, 'Torn/Without Address':0, 'Invalid OTP':0 };
-    rows.forEach(r => counts[normStatus(r.presentStatus)]++);
-    const el = $(targetId);
-    if (!el) return;
-    el.innerHTML = Object.entries(counts)
-      .map(([k,v]) => `<span class="pill">${esc(k)}: <b>${v}</b></span>`).join(' ');
-  }
-
-  function renderSpm(rows) {
-    const view = filterRows(rows, 'article-status-filter');
+  function renderSpm() {
+    const rows = filtered(spmRows, 'article-status-filter', 'article-search');
     const table = $('spmArticles');
     if (!table) return;
 
-    table.innerHTML =
-      `<thead><tr>
+    table.innerHTML = `
+      <thead><tr>
+        <th class="article-select-all"><input type="checkbox" aria-label="Select all"></th>
         <th>Barcode</th><th>PMV Application</th><th>Artisan</th><th>PIN</th>
         <th>Address</th><th>Circle</th><th>Division</th><th>Delivery Staff</th>
-        <th>Article Status</th><th>Remarks</th><th>Action</th>
-      </tr></thead><tbody>` +
-      view.map(r => `<tr>
-        <td data-label="Barcode">${esc(r.barCodeId)}</td>
-        <td data-label="PMV Application">${esc(r.pmvApplicationNumber)}</td>
-        <td data-label="Artisan"><strong>${esc(r.artisanName)}</strong><small>${mobile(r.mobileNumber)}</small></td>
-        <td data-label="PIN">${esc(r.pinCode)}</td>
-        <td data-label="Address">${esc(r.address)}</td>
-        <td data-label="Circle">${esc(r.circleName)}</td>
-        <td data-label="Division">${esc(r.divisionName)}</td>
-        <td data-label="Delivery Staff">${esc(r.deliveryStaff)}</td>
-        <td data-label="Article Status">
-          <select class="article-status" data-key="${esc(r.articleKey)}">${statusOptions(r.presentStatus)}</select>
-        </td>
-        <td data-label="Remarks"><input class="article-remarks" data-key="${esc(r.articleKey)}" value="${esc(r.remarks)}" placeholder="Remarks"></td>
-        <td data-label="Action"><button type="button" class="btn btn-primary article-save" data-key="${esc(r.articleKey)}">SAVE</button></td>
-      </tr>`).join('') + '</tbody>';
+        <th>Present Status</th><th>Remarks</th><th>Action</th>
+      </tr></thead>
+      <tbody>
+      ${rows.map(r => `
+        <tr>
+          <td><input class="article-check" type="checkbox" data-key="${esc(r.articleKey)}"></td>
+          <td>${esc(r.barCodeId)}</td>
+          <td>${esc(r.pmvApplicationNumber)}</td>
+          <td><b>${esc(r.artisanName)}</b><small>${esc(r.mobileNumber)}</small></td>
+          <td>${esc(r.pinCode)}</td>
+          <td>${esc(r.address)}</td>
+          <td>${esc(r.circleName)}</td>
+          <td>${esc(r.divisionName)}</td>
+          <td>${esc(r.deliveryStaff)}</td>
+          <td><select class="article-status" data-key="${esc(r.articleKey)}">${optionList(r.presentStatus)}</select></td>
+          <td><input class="article-remarks" data-key="${esc(r.articleKey)}" value="${esc(r.remarks)}"></td>
+          <td><button type="button" class="btn btn-primary article-save" data-key="${esc(r.articleKey)}">SAVE</button></td>
+        </tr>`).join('')}
+      </tbody>`;
 
-    addBulkControls('spmArticles', 'spm');
-    table.querySelectorAll('.article-check').forEach(x => x.addEventListener('change', () => updateSelectionCount('spm')));
-    table.querySelectorAll('.article-save').forEach(b => b.addEventListener('click', () => saveOneSpm(b.dataset.key)));
+    bindSelectAll('spmArticles', 'spm-selected-count');
     $('spm-selected-count').textContent = '0 selected';
+
+    table.querySelectorAll('.article-save').forEach(btn => {
+      btn.addEventListener('click', () => saveOne(btn.dataset.key));
+    });
+
+    summary(rows, 'spm-status-summary');
   }
 
-  async function saveOneSpm(key) {
-    const st = document.querySelector(`.article-status[data-key="${CSS.escape(key)}"]`);
-    const rm = document.querySelector(`.article-remarks[data-key="${CSS.escape(key)}"]`);
+  async function saveOne(key) {
+    const status = document.querySelector(`.article-status[data-key="${CSS.escape(key)}"]`)?.value || 'Pending';
+    const remarks = document.querySelector(`.article-remarks[data-key="${CSS.escape(key)}"]`)?.value || '';
+
     try {
       await PMVApi.updateArticleStatus({
-        date: $('spm-date').value, articleKey: key,
-        status: st?.value || 'Pending', remarks: rm?.value || ''
+        date: $('spm-date').value,
+        articleKey: key,
+        status,
+        remarks
       });
       toast('Article status updated.');
       await loadSpm();
-    } catch (e) { toast(e.message, 1); }
+    } catch (e) {
+      toast(e.message, 1);
+    }
   }
 
   async function bulkSpm() {
-    const keys = checkedKeys('spm');
+    const keys = selectedKeys('spmArticles');
     if (!keys.length) return toast('Select one or more articles first.', 1);
+
     const status = $('spm-bulk-status').value;
-    const date = $('spm-date').value;
     const remarksByKey = {};
     keys.forEach(k => {
-      const el = document.querySelector(`.article-remarks[data-key="${CSS.escape(k)}"]`);
-      remarksByKey[k] = el?.value || '';
+      remarksByKey[k] =
+        document.querySelector(`.article-remarks[data-key="${CSS.escape(k)}"]`)?.value || '';
     });
 
     const button = $('spm-bulk-apply');
-    if (button) { button.disabled = true; button.textContent = 'UPDATING…'; }
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'UPDATING…';
+    }
+
     try {
-      const x = await PMVApi.bulkUpdateArticleStatus({ date, articleKeys: keys, status, remarksByKey });
-      toast(`${x.updated} article status update(s) saved.`);
+      const result = await PMVApi.bulkUpdateArticleStatus({
+        date: $('spm-date').value,
+        articleKeys: keys,
+        status,
+        remarksByKey
+      });
+      toast(`${result.updated} article status update(s) saved.`);
       await loadSpm();
-    } catch (e) { toast(e.message, 1); }
-    finally {
-      if (button) { button.disabled = false; button.textContent = 'CHANGE SELECTED'; }
+    } catch (e) {
+      toast(e.message, 1);
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = 'CHANGE SELECTED';
+      }
     }
   }
 
   async function loadSpm() {
     try {
       const date = $('spm-date').value;
-      const q = $('article-search').value.trim();
-      const x = await PMVApi.articles(date, q);
-      spmRows = x.articles || [];
+      const query = $('article-search').value.trim();
+      const result = await PMVApi.articles(date, query);
+
+      spmRows = result.articles || [];
       window.__spmArticleRows = spmRows;
 
-      $('article-scope').textContent =
-        `Office: ${x.officeName || ''} · Assigned PIN codes: ${(x.pincodes || []).join(', ') || 'Not configured'} · ${x.totalVisible || spmRows.length} articles visible`;
+      const pins = result.assignedPins || result.pincodes || [];
+      const total = result.total ?? result.totalVisible ?? spmRows.length;
 
-      renderSpm(spmRows);
-      injectSpmChecks();
-      renderSummary(spmRows, 'spm-status-summary');
+      $('article-scope').textContent =
+        `Office: ${result.officeName || ''} · Assigned PIN codes: ${pins.join(', ') || 'Not configured'} · ${total} articles visible`;
+
+      renderSpm();
     } catch (e) {
       $('article-scope').textContent = e.message;
       toast(e.message, 1);
@@ -165,7 +203,7 @@
   }
 
   function exportCsv() {
-    const rows = filterRows(spmRows, 'article-status-filter');
+    const rows = filtered(spmRows, 'article-status-filter', 'article-search');
     if (!rows.length) return toast('No articles available for export.', 1);
 
     const headers = [
@@ -173,167 +211,158 @@
       'Mobile Number','Address','Circle','Division','PIN Code',
       'Delivery Staff','Present Status','Remarks','Updated At'
     ];
-    const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const lines = [headers.map(q).join(',')];
+
+    const quote = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const lines = [headers.map(quote).join(',')];
 
     rows.forEach(r => lines.push([
       r.articleKey,r.barCodeId,r.pmvApplicationNumber,r.artisanName,
       r.mobileNumber,r.address,r.circleName,r.divisionName,r.pinCode,
-      r.deliveryStaff,normStatus(r.presentStatus),r.remarks,r.updatedAt
-    ].map(q).join(',')));
+      r.deliveryStaff,normalise(r.presentStatus),r.remarks,r.updatedAt
+    ].map(quote).join(',')));
 
-    const blob = new Blob(['\ufeff' + lines.join('\r\n')], {type:'text/csv;charset=utf-8;'});
-    const url = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(
+      new Blob(['\ufeff' + lines.join('\r\n')], {type:'text/csv;charset=utf-8'})
+    );
     const a = document.createElement('a');
-    const date = $('spm-date').value || 'date';
     a.href = url;
-    a.download = `PMV_Articles_${date}.csv`;
-    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    a.download = `PMV_Articles_${$('spm-date').value || 'date'}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   }
 
-  function renderAdmin(rows) {
-    const view = filterRows(rows, 'admin-article-status-filter');
+  function renderAdmin() {
+    const rows = filtered(adminRows, 'admin-article-status-filter', 'admin-article-search');
     const table = $('adminArticles');
     if (!table) return;
 
-    table.innerHTML =
-      `<thead><tr>
+    table.innerHTML = `
+      <thead><tr>
+        <th class="article-select-all"><input type="checkbox" aria-label="Select all"></th>
         <th>Barcode</th><th>PMV Application</th><th>Artisan</th><th>PIN</th>
-        <th>Office</th><th>SPM</th><th>Present Status</th><th>Remarks</th>
-        <th>Updated</th><th>Master Status</th><th>Sync</th>
-      </tr></thead><tbody>` +
-      view.map(r => {
-        const changed = r.updatedAt ? 'Updated by SPM' : 'No update';
-        const synced = normStatus(r.presentStatus) === normStatus(r.masterStatus);
+        <th>Office</th><th>SPM</th><th>Present Status</th><th>Master Status</th>
+        <th>Remarks</th><th>Updated</th><th>Review</th>
+      </tr></thead>
+      <tbody>
+      ${rows.map(r => {
+        const synced = normalise(r.presentStatus) === normalise(r.masterStatus);
         return `<tr>
-          <td data-label="Barcode">${esc(r.barCodeId)}</td>
-          <td data-label="PMV Application">${esc(r.pmvApplicationNumber)}</td>
-          <td data-label="Artisan">${esc(r.artisanName)}<small>${mobile(r.mobileNumber)}</small></td>
-          <td data-label="PIN">${esc(r.pinCode)}</td>
-          <td data-label="Office">${esc(r.officeName)}</td>
-          <td data-label="SPM">${esc(r.spmName)}<small>${esc(r.spmId)}</small></td>
-          <td data-label="Present Status"><i class="pill ${normStatus(r.presentStatus)==='Delivered'?'green':'amber'}">${esc(normStatus(r.presentStatus))}</i></td>
-          <td data-label="Remarks">${esc(r.remarks)}</td>
-          <td data-label="Updated">${esc(r.updatedAt)}</td>
-          <td data-label="Master Status">${esc(normStatus(r.masterStatus))}</td>
-          <td data-label="Sync"><span class="pill ${synced ? 'green' : 'amber'}">${synced ? 'Synced' : changed}</span></td>
+          <td><input class="article-check" type="checkbox" data-key="${esc(r.articleKey)}"></td>
+          <td>${esc(r.barCodeId)}</td>
+          <td>${esc(r.pmvApplicationNumber)}</td>
+          <td><b>${esc(r.artisanName)}</b><small>${esc(r.mobileNumber)}</small></td>
+          <td>${esc(r.pinCode)}</td>
+          <td>${esc(r.officeName)}</td>
+          <td>${esc(r.spmName)}<small>${esc(r.spmId)}</small></td>
+          <td>${esc(normalise(r.presentStatus))}</td>
+          <td>${esc(normalise(r.masterStatus))}</td>
+          <td>${esc(r.remarks)}</td>
+          <td>${esc(r.updatedAt)}</td>
+          <td>${synced ? 'SYNCED' : 'PENDING MASTER PUSH'}</td>
         </tr>`;
-      }).join('') + '</tbody>';
+      }).join('')}
+      </tbody>`;
 
-    addBulkControls('adminArticles', 'admin');
-    table.querySelectorAll('.article-check').forEach(x => x.addEventListener('change', () => updateSelectionCount('admin')));
+    bindSelectAll('adminArticles', 'admin-selected-count');
     $('admin-selected-count').textContent = '0 selected';
-  }
-
-  // Rebuild table headers with checkboxes after the main render without duplicating the header.
-  function injectCheckboxCells(tableId) {
-    const table = $(tableId);
-    if (!table) return;
-    const all = table.querySelector('thead input.article-select-all');
-    if (!all) {
-      const th = document.createElement('th');
-      th.className = 'article-select-all';
-      th.innerHTML = '<input type="checkbox" aria-label="Select all visible articles">';
-      table.querySelector('thead tr').prepend(th);
-      th.querySelector('input').addEventListener('change', e => {
-        table.querySelectorAll('tbody input.article-check').forEach(cb => cb.checked = e.target.checked);
-        updateSelectionCount(tableId === 'spmArticles' ? 'spm' : 'admin');
-      });
-    }
-    table.querySelectorAll('tbody tr').forEach(tr => {
-      if (tr.querySelector('input.article-check')) return;
-      const keyCell = document.createElement('td');
-      const key = tr.querySelector('[data-label="Barcode"]')?.textContent || '';
-      const source = tableId === 'spmArticles' ? spmRows : adminRows;
-      const found = source.find(r => String(r.barCodeId || '') === key);
-      keyCell.innerHTML = `<input type="checkbox" class="article-check" data-key="${esc(found?.articleKey || '')}">`;
-      tr.prepend(keyCell);
-    });
+    summary(rows, 'admin-status-summary');
   }
 
   async function loadAdminArticles() {
     try {
-      const date = $('admin-date').value;
-      const q = $('admin-article-search').value.trim();
-      const x = await PMVApi.adminArticles(date, q);
-      adminRows = x.articles || [];
+      const result = await PMVApi.adminArticles(
+        $('admin-date').value,
+        $('admin-article-search').value.trim()
+      );
+
+      adminRows = result.articles || [];
       window.__adminArticleRows = adminRows;
 
       $('admin-article-status').textContent =
-        `${x.total || adminRows.length} records shown · ${x.updatedCount || 0} SPM status update(s) for ${date} · ${x.pendingSyncCount || 0} pending master synchronisation.`;
+        `${result.total ?? adminRows.length} records · ${result.updatedCount || 0} SPM updates · ${result.pendingSyncCount || 0} pending master synchronisations`;
 
-      renderAdmin(adminRows);
-      injectCheckboxCells('adminArticles');
-      renderSummary(adminRows, 'admin-status-summary');
+      renderAdmin();
     } catch (e) {
       $('admin-article-status').textContent = e.message;
       toast(e.message, 1);
     }
   }
 
-  function injectSpmChecks() {
-    injectCheckboxCells('spmArticles');
-  }
-
   async function pushSelected() {
-    const keys = checkedKeys('admin');
-    if (!keys.length) return toast('Select one or more SPM-updated articles first.', 1);
+    const keys = selectedKeys('adminArticles');
+    if (!keys.length) return toast('Select article(s) first.', 1);
     if (!confirm(`Authorise master update for ${keys.length} selected article(s)?`)) return;
 
-    const button = $('admin-push-selected');
-    if (button) { button.disabled = true; button.textContent = 'AUTHORISING…'; }
     try {
-      const x = await PMVApi.pushArticleStatusToMaster({
-        date: $('admin-date').value, articleKeys: keys
+      const result = await PMVApi.pushArticleStatusToMaster({
+        date: $('admin-date').value,
+        articleKeys: keys
       });
-      toast(`${x.pushed || 0} article(s) pushed to ARTICLE_MASTER; ${x.skipped || 0} skipped.`);
+      toast(`${result.pushed || 0} pushed; ${result.skipped || 0} skipped.`);
       await loadAdminArticles();
-    } catch (e) { toast(e.message, 1); }
-    finally {
-      if (button) { button.disabled = false; button.textContent = 'AUTHORISE PUSH SELECTED'; }
+    } catch (e) {
+      toast(e.message, 1);
     }
   }
 
   async function pushFiltered() {
-    const rows = filterRows(adminRows, 'admin-article-status-filter');
-    const keys = rows.filter(r =>
-      r.updatedAt && normStatus(r.presentStatus) !== normStatus(r.masterStatus)
-    ).map(r => r.articleKey);
+    const rows = filtered(adminRows, 'admin-article-status-filter', 'admin-article-search');
+    const keys = rows
+      .filter(r => r.updatedAt && normalise(r.presentStatus) !== normalise(r.masterStatus))
+      .map(r => r.articleKey);
 
-    if (!keys.length) return toast('No pending SPM changes in the current filter.', 1);
-    if (!confirm(`Authorise master update for all ${keys.length} filtered pending article(s)?`)) return;
+    if (!keys.length) return toast('No pending master changes in the current filter.', 1);
+    if (!confirm(`Authorise master update for ${keys.length} filtered article(s)?`)) return;
 
-    const button = $('admin-push-filtered');
-    if (button) { button.disabled = true; button.textContent = 'AUTHORISING…'; }
     try {
-      const x = await PMVApi.pushArticleStatusToMaster({
-        date: $('admin-date').value, articleKeys: keys
+      const result = await PMVApi.pushArticleStatusToMaster({
+        date: $('admin-date').value,
+        articleKeys: keys
       });
-      toast(`${x.pushed || 0} filtered article(s) pushed to ARTICLE_MASTER.`);
+      toast(`${result.pushed || 0} pushed; ${result.skipped || 0} skipped.`);
       await loadAdminArticles();
-    } catch (e) { toast(e.message, 1); }
-    finally {
-      if (button) { button.disabled = false; button.textContent = 'AUTHORISE PUSH FILTERED'; }
+    } catch (e) {
+      toast(e.message, 1);
     }
   }
 
+  window.ArticleDashboard = {
+    loadSpm,
+    loadAdminArticles,
+    bulkSpm,
+    pushSelected,
+    pushFiltered,
+    exportCsv,
+    renderSpm,
+    renderAdmin
+  };
+
   function bind() {
     $('article-fetch')?.addEventListener('click', loadSpm);
-    $('article-search')?.addEventListener('keydown', e => { if (e.key === 'Enter') loadSpm(); });
-    $('spm-date')?.addEventListener('change', loadSpm);
-    $('article-status-filter')?.addEventListener('change', () => { renderSpm(spmRows); injectSpmChecks(); });
-
-    $('spm-bulk-apply')?.addEventListener('click', bulkSpm);
     $('article-export-csv')?.addEventListener('click', exportCsv);
+    $('spm-bulk-apply')?.addEventListener('click', bulkSpm);
+    $('article-status-filter')?.addEventListener('change', renderSpm);
+    $('article-search')?.addEventListener('input', renderSpm);
 
     $('admin-article-fetch')?.addEventListener('click', loadAdminArticles);
-    $('admin-article-search')?.addEventListener('keydown', e => { if (e.key === 'Enter') loadAdminArticles(); });
-    $('admin-date')?.addEventListener('change', loadAdminArticles);
-    $('admin-article-status-filter')?.addEventListener('change', () => { renderAdmin(adminRows); injectCheckboxCells('adminArticles'); });
-
+    $('admin-article-status-filter')?.addEventListener('change', renderAdmin);
+    $('admin-article-search')?.addEventListener('input', renderAdmin);
     $('admin-push-selected')?.addEventListener('click', pushSelected);
     $('admin-push-filtered')?.addEventListener('click', pushFiltered);
+
+    $('spm-date')?.addEventListener('change', () => {
+      if (!$('spmView')?.classList.contains('hidden')) loadSpm();
+    });
+    $('admin-date')?.addEventListener('change', () => {
+      if (!$('adminView')?.classList.contains('hidden')) loadAdminArticles();
+    });
   }
 
-  window.PMVArticles = { bind, loadSpm, loadAdminArticles, exportCsv };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bind);
+  } else {
+    bind();
+  }
 })();
