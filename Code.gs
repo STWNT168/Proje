@@ -224,40 +224,7 @@ function readArticleMasterV9_(){
   });
  }
  return {headers,rows,headerRow:hr+1,diagnostics:{
-  sheetName:sh.getName(),totalRows:rows.length,headerRow:hr+1,
-  keyHeader:idx.key>=0?headers[idx.key]:'',pmvHeader:idx.pmv>=0?headers[idx.pmv]:'',
-  artisanHeader:idx.artisan>=0?headers[idx.artisan]:'',pinHeader:idx.pin>=0?headers[idx.pin]:'',
-  masterStatusHeader:idx.masterStatus>=0?headers[idx.masterStatus]:''
- }};
-}
-function articlePinsForUserV9_(user){
- const out=[],add=v=>String(v??'').split(/[,;\s|]+/).map(x=>x.trim()).filter(Boolean).forEach(x=>out.push(x));
- add(user&&user.assignedPins);add(user&&user.pincodes);add(user&&user.pinCodes);
- return [...new Set(out)];
-}
-function v9all_(r,q){
- q=String(q||'').trim().toLowerCase();if(!q)return true;
- const hay=Object.values(r.fields||{}).concat([r.articleKey,r.barCodeId,r.pmvApplicationNumber,r.artisanName,r.mobileNumber,r.address,r.circleName,r.divisionName,r.pinCode,r.deliveryStaff,r.masterStatus]).join(' ').toLowerCase();
- return q.split(/\s+/).filter(Boolean).every(t=>hay.includes(t));
-}
-function getSpmArticlesV9_(session,date,search,limit){
- const user=getUser_(session.userId),role=String(user.role||'').toUpperCase();
- const isAdmin=role===CONFIG.ROLES.ADMIN||role===CONFIG.ROLES.DPS;
- const pins=articlePinsForUserV9_(user);
- if(!isAdmin&&!pins.length)return {articles:[],total:0,assignedPins:[],diagnostics:{error:'No PIN codes assigned to this SPM.',userId:user.userId,officeName:user.officeName||''}};
- const master=readArticleMasterV9_();
- const pinSet=new Set(pins.map(x=>String(x).trim()));
- let a=master.rows.filter(r=>isAdmin||pinSet.has(String(r.pinCode).trim()));
- const matchingBeforeSearch=a.length;
- if(search)a=a.filter(r=>v9all_(r,search));
- a=a.slice(0,Number(limit||10000));
- return {articles:a,total:a.length,totalMasterRows:master.rows.length,assignedPins:pins,diagnostics:{...master.diagnostics,matchingBeforeSearch,search:search||''}};
-}
-function testArticleMasterV9(){
- const m=readArticleMasterV9_(),target='182143',n=m.rows.filter(r=>String(r.pinCode).trim()===target).length;
- const result={...m.diagnostics,totalArticles:m.rows.length,targetPin:target,targetPinCount:n,sample:m.rows.slice(0,3)};
- Logger.log(JSON.stringify(result,null,2));return result;
-}
+
 /*
  Add this case to your existing doGet switch:
  case 'articleMasterDiagnosticV9':
