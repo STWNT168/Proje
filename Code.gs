@@ -161,75 +161,6 @@ function articleMatchesSearch_(row,search){
   const hay=Object.values(row||{}).map(v=>clean_(v)).join(' ').toLowerCase();
   return q.split(/\s+/).filter(Boolean).every(t=>hay.includes(t));
 }
-/**
- * PMV Toolkit Tracker V9 - Article Master reader
- * Exact source headers supported:
- * Bar Code ID, PMV Application Number, Artisan Name, Mobile Number,
- * Artisan Current Address, Circle Name, Division Name, Artisan Pin Code,
- * Delivery Staff Assigned UnAssigned, Toolkit Delivery Status.
- *
- * Merge these functions into the existing Code.gs; keep all unrelated daily PMV functions.
- */
-const V9_ARTICLE_HEADERS={
- key:['Bar Code ID','Barcode ID','Bar Code','Barcode','Article Key','Article Number','Article No','Article ID'],
- pmv:['PMV Application Number','PMV Application No','PMV Application','Application Number'],
- artisan:['Artisan Name','Artisan','Name'],
- mobile:['Mobile Number','Mobile','Mobile No','Contact Number'],
- address:['Artisan Current Address','Current Address','Address','Artisan Address'],
- circle:['Circle Name','Circle'], division:['Division Name','Division'],
- pin:['Artisan Pin Code','Artisan PIN Code','Artisan PIN','PIN Code','Pincode','PIN','Delivery PIN','Destination PIN'],
- staff:['Delivery Staff Assigned UnAssigned','Delivery Staff','Delivery Staff Assigned','Delivery Staff Name'],
- masterStatus:['Toolkit Delivery Status','Delivery Status','Status','Source Status']
-};
-function v9h_(s){return String(s==null?'':s).trim().toLowerCase().replace(/[\s_\-\/]+/g,' ').replace(/[^\p{L}\p{N} ]/gu,'').trim()}
-function v9HeaderRow_(v){
- const wanted=[].concat(...Object.values(V9_ARTICLE_HEADERS)).map(v9h_);
- let best={row:0,score:0};
- for(let r=0;r<Math.min(v.length,30);r++){const a=v[r].map(v9h_);let score=0;wanted.forEach(x=>{if(a.includes(x))score++});if(score>best.score)best={row:r,score}}
- return best.score>=2?best.row:0;
-}
-function v9idx_(map,aliases){for(const a of aliases){const i=map[v9h_(a)];if(i!==undefined)return i}return -1}
-function readArticleMasterV9_(){
- const ss=SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
- const sh=ss.getSheetByName(CONFIG.SHEETS.ARTICLE_MASTER);
- if(!sh)throw new Error('ARTICLE_MASTER sheet not found: '+CONFIG.SHEETS.ARTICLE_MASTER);
- const v=sh.getDataRange().getDisplayValues();
- if(!v.length)return {headers:[],rows:[],diagnostics:{sheetName:sh.getName(),totalRows:0}};
- const hr=v9HeaderRow_(v), headers=v[hr].map(x=>String(x||'').trim()), map={};
- headers.forEach((h,i)=>{if(h)map[v9h_(h)]=i});
- const idx={
-  key:v9idx_(map,V9_ARTICLE_HEADERS.key),pmv:v9idx_(map,V9_ARTICLE_HEADERS.pmv),
-  artisan:v9idx_(map,V9_ARTICLE_HEADERS.artisan),mobile:v9idx_(map,V9_ARTICLE_HEADERS.mobile),
-  address:v9idx_(map,V9_ARTICLE_HEADERS.address),circle:v9idx_(map,V9_ARTICLE_HEADERS.circle),
-  division:v9idx_(map,V9_ARTICLE_HEADERS.division),pin:v9idx_(map,V9_ARTICLE_HEADERS.pin),
-  staff:v9idx_(map,V9_ARTICLE_HEADERS.staff),masterStatus:v9idx_(map,V9_ARTICLE_HEADERS.masterStatus)
- };
- const rows=[];
- for(let r=hr+1;r<v.length;r++){
-  const raw=v[r];if(!raw.some(x=>String(x).trim()))continue;
-  const fields={};headers.forEach((h,i)=>{if(h)fields[h]=String(raw[i]??'').trim()});
-  const key=idx.key>=0?String(raw[idx.key]||'').trim():(idx.pmv>=0?String(raw[idx.pmv]||'').trim():'');
-  rows.push({
-   rowNumber:r+1,articleKey:key,barCodeId:idx.key>=0?String(raw[idx.key]||'').trim():'',
-   pmvApplicationNumber:idx.pmv>=0?String(raw[idx.pmv]||'').trim():'',
-   artisanName:idx.artisan>=0?String(raw[idx.artisan]||'').trim():'',
-   mobileNumber:idx.mobile>=0?String(raw[idx.mobile]||'').trim():'',
-   address:idx.address>=0?String(raw[idx.address]||'').trim():'',
-   circleName:idx.circle>=0?String(raw[idx.circle]||'').trim():'',
-   divisionName:idx.division>=0?String(raw[idx.division]||'').trim():'',
-   pinCode:idx.pin>=0?String(raw[idx.pin]||'').trim():'',
-   deliveryStaff:idx.staff>=0?String(raw[idx.staff]||'').trim():'',
-   masterStatus:idx.masterStatus>=0?String(raw[idx.masterStatus]||'').trim():'',
-   fields
-  });
- }
- return {headers,rows,headerRow:hr+1,diagnostics:{
-
-/*
- Add this case to your existing doGet switch:
- case 'articleMasterDiagnosticV9':
-   return json_({success:true,data:testArticleMasterV9()});
-*/
 /* ---------- users / sessions ---------- */
 function findUser_(userId,mobile){
   const rows=readSheetObjects_(CONFIG.SHEETS.USERS);
@@ -263,6 +194,7 @@ function authenticate_(s){
   const u=findUser_(s.userId,''); if(!u||!u.active) throw new Error('Account is inactive.');
   /* Refresh assigned pins from USER_MASTER so changes apply without re-login. */
   s.role=u.role; s.officeName=u.officeName; s.officeCode=u.officeCode; s.assignedPins=normalizePins_(u.assignedPins);
+  if(!s.assignedPins.length) s.assignedPins=getEffectivePins_(s);
   return s;
 }
 function handleLogin_(userId,mobile){
@@ -280,26 +212,64 @@ function logout_(s){
 function requireAdmin_(s){authenticate_(s);if(s.role!==CONFIG.ROLES.ADMIN&&s.role!==CONFIG.ROLES.DPS)throw new Error('Administrator/DPS authorisation required.');}
 function requireRole_(s,roles){authenticate_(s);if(!roles.includes(s.role))throw new Error('You are not authorised for this operation.');}
 
-/* ---------- PIN fallback from OFFICE_MASTER ---------- */
+/* ---------- robust SPM PIN resolution ---------- */
+function pinValuesFromObject_(row){
+  const out=[];
+  Object.keys(row||{}).forEach(k=>{
+    const n=normHeader_(k);
+    if(/PIN|POSTAL_CODE|ZIP/.test(n)) out.push(...normalizePins_(row[k]));
+  });
+  return [...new Set(out)];
+}
+function officeMatches_(row,officeName,officeCode){
+  const code=clean_(row.OFFICE_CODE||row.SOL_ID||row.SOLID||row.OFFICE_ID||row.CODE||row.SOL);
+  const name=clean_(row.OFFICE_NAME||row.OFFICE||row.POST_OFFICE||row.POSTOFFICE||row.NAME||row.SO_NAME);
+  const wantCode=upper_(officeCode), wantName=upper_(officeName);
+  if(wantCode && upper_(code)===wantCode) return true;
+  if(wantName && upper_(name)===wantName) return true;
+  if(wantName && name && (upper_(name).includes(wantName)||wantName.includes(upper_(name)))) return true;
+  return false;
+}
 function getOfficePins_(officeName,officeCode){
+  const out=[];
   try{
     const rows=readSheetObjects_(CONFIG.SHEETS.OFFICE);
-    const out=[];
-    for(const r of rows){
-      const code=clean_(r.OFFICE_CODE||r.SOL_ID||r.SOLID||r.OFFICE_ID||r.CODE);
-      const name=clean_(r.OFFICE_NAME||r.OFFICE||r.POST_OFFICE||r.NAME);
-      if((officeCode&&upper_(code)===upper_(officeCode)) || (officeName&&upper_(name)===upper_(officeName))){
-        const source=r.ASSIGNED_PINS||r.PIN_CODES||r.PINCODES||r.ASSIGNED_PIN_CODES||r.DELIVERY_PINS||r.PIN_CODE||r.PIN;
-        out.push(...normalizePins_(source));
-      }
-    }
-    return [...new Set(out)];
-  }catch(e){return [];}
+    rows.forEach(r=>{if(officeMatches_(r,officeName,officeCode))out.push(...pinValuesFromObject_(r));});
+  }catch(e){}
+  return [...new Set(out)];
+}
+function getUserPins_(userId){
+  const out=[];
+  try{
+    const rows=readSheetObjects_(CONFIG.SHEETS.USERS);
+    rows.forEach(r=>{
+      const id=clean_(r.USER_ID||r.USERID||r.ID||r.EMPLOYEE_ID||r.EMP_ID);
+      if(upper_(id)===upper_(userId)) out.push(...pinValuesFromObject_(r));
+    });
+  }catch(e){}
+  return [...new Set(out)];
 }
 function getEffectivePins_(session){
-  let pins=normalizePins_(session.assignedPins);
-  if(!pins.length) pins=getOfficePins_(session.officeName,session.officeCode);
+  let pins=normalizePins_(session&&session.assignedPins);
+  if(!pins.length) pins=getUserPins_(session&&session.userId);
+  if(!pins.length) pins=getOfficePins_(session&&session.officeName,session&&session.officeCode);
   return [...new Set(pins)];
+}
+function diagnosePinAccess_(session){
+  requireRole_(session,[CONFIG.ROLES.SPM,CONFIG.ROLES.DPS,CONFIG.ROLES.ADMIN]);
+  const userPins=getUserPins_(session.userId);
+  const officePins=getOfficePins_(session.officeName,session.officeCode);
+  const effective=getEffectivePins_(session);
+  const master=readSheetObjects_(CONFIG.SHEETS.ARTICLE_MASTER);
+  const pinCounts={};
+  master.forEach(r=>{const p=articlePin_(r);if(p)pinCounts[p]=(pinCounts[p]||0)+1;});
+  const matching=master.filter(r=>effective.includes(articlePin_(r))).length;
+  return {
+    userId:session.userId,officeName:session.officeName,officeCode:session.officeCode,
+    sessionPins:normalizePins_(session.assignedPins),userPins,officePins,effectivePins:effective,
+    masterRows:master.length,matchingArticles:matching,
+    matchingByPin:effective.reduce((o,p)=>(o[p]=pinCounts[p]||0,o),{})
+  };
 }
 
 /* ---------- daily ---------- */
@@ -480,7 +450,7 @@ function setupPMVSheets(){
 function doGet(e){
   try{
     const p=e&&e.parameter?e.parameter:{},a=clean_(p.action);
-    if(!a)return json_({status:'OK',service:'PMV Toolkit Tracker',version:'V8 Article Master Fix',date:today_()});
+    if(!a)return json_({status:'OK',service:'PMV Toolkit Tracker',version:'V12 Corrected PIN + Article Master Fix',date:today_()});
     if(a==='login')return handleLogin_(clean_(p.userId),clean_(p.mobile));
     const s=parseSession_(p.session);authenticate_(s);
     switch(a){
@@ -495,6 +465,7 @@ function doGet(e){
       case 'pushArticleStatusToMaster': requireAdmin_(s); return json_(pushArticleStatusToMaster_(s,JSON.parse(p.record||'{}')));
       case 'updateArticleMaster': requireAdmin_(s); return json_(updateArticleMaster_(s,JSON.parse(p.record||'{}')));
       case 'diagnoseArticleMaster': return json_(diagnoseArticleMaster_(s));
+      case 'diagnosePinAccess': return json_(diagnosePinAccess_(s));
       case 'diagnoseArticleStatus': return json_(diagnoseArticleStatus_(s,clean_(p.date)||today_()));
       default: throw new Error('Unknown action: '+a);
     }
@@ -511,6 +482,7 @@ function doPost(e){
       case 'pushArticleStatusToMaster':requireAdmin_(s);return json_(pushArticleStatusToMaster_(s,b.record||{}));
       case 'updateArticleMaster':requireAdmin_(s);return json_(updateArticleMaster_(s,b.record||{}));
       case 'diagnoseArticleMaster':return json_(diagnoseArticleMaster_(s));
+      case 'diagnosePinAccess':return json_(diagnosePinAccess_(s));
       case 'diagnoseArticleStatus':return json_(diagnoseArticleStatus_(s,clean_(b.date)||today_()));
       default:throw new Error('Unknown action: '+a);
     }
