@@ -161,7 +161,108 @@ function articleMatchesSearch_(row,search){
   const hay=Object.values(row||{}).map(v=>clean_(v)).join(' ').toLowerCase();
   return q.split(/\s+/).filter(Boolean).every(t=>hay.includes(t));
 }
-
+/**
+ * PMV Toolkit Tracker V9 - Article Master reader
+ * Exact source headers supported:
+ * Bar Code ID, PMV Application Number, Artisan Name, Mobile Number,
+ * Artisan Current Address, Circle Name, Division Name, Artisan Pin Code,
+ * Delivery Staff Assigned UnAssigned, Toolkit Delivery Status.
+ *
+ * Merge these functions into the existing Code.gs; keep all unrelated daily PMV functions.
+ */
+const V9_ARTICLE_HEADERS={
+ key:['Bar Code ID','Barcode ID','Bar Code','Barcode','Article Key','Article Number','Article No','Article ID'],
+ pmv:['PMV Application Number','PMV Application No','PMV Application','Application Number'],
+ artisan:['Artisan Name','Artisan','Name'],
+ mobile:['Mobile Number','Mobile','Mobile No','Contact Number'],
+ address:['Artisan Current Address','Current Address','Address','Artisan Address'],
+ circle:['Circle Name','Circle'], division:['Division Name','Division'],
+ pin:['Artisan Pin Code','Artisan PIN Code','Artisan PIN','PIN Code','Pincode','PIN','Delivery PIN','Destination PIN'],
+ staff:['Delivery Staff Assigned UnAssigned','Delivery Staff','Delivery Staff Assigned','Delivery Staff Name'],
+ masterStatus:['Toolkit Delivery Status','Delivery Status','Status','Source Status']
+};
+function v9h_(s){return String(s==null?'':s).trim().toLowerCase().replace(/[\s_\-\/]+/g,' ').replace(/[^\p{L}\p{N} ]/gu,'').trim()}
+function v9HeaderRow_(v){
+ const wanted=[].concat(...Object.values(V9_ARTICLE_HEADERS)).map(v9h_);
+ let best={row:0,score:0};
+ for(let r=0;r<Math.min(v.length,30);r++){const a=v[r].map(v9h_);let score=0;wanted.forEach(x=>{if(a.includes(x))score++});if(score>best.score)best={row:r,score}}
+ return best.score>=2?best.row:0;
+}
+function v9idx_(map,aliases){for(const a of aliases){const i=map[v9h_(a)];if(i!==undefined)return i}return -1}
+function readArticleMasterV9_(){
+ const ss=SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+ const sh=ss.getSheetByName(CONFIG.SHEETS.ARTICLE_MASTER);
+ if(!sh)throw new Error('ARTICLE_MASTER sheet not found: '+CONFIG.SHEETS.ARTICLE_MASTER);
+ const v=sh.getDataRange().getDisplayValues();
+ if(!v.length)return {headers:[],rows:[],diagnostics:{sheetName:sh.getName(),totalRows:0}};
+ const hr=v9HeaderRow_(v), headers=v[hr].map(x=>String(x||'').trim()), map={};
+ headers.forEach((h,i)=>{if(h)map[v9h_(h)]=i});
+ const idx={
+  key:v9idx_(map,V9_ARTICLE_HEADERS.key),pmv:v9idx_(map,V9_ARTICLE_HEADERS.pmv),
+  artisan:v9idx_(map,V9_ARTICLE_HEADERS.artisan),mobile:v9idx_(map,V9_ARTICLE_HEADERS.mobile),
+  address:v9idx_(map,V9_ARTICLE_HEADERS.address),circle:v9idx_(map,V9_ARTICLE_HEADERS.circle),
+  division:v9idx_(map,V9_ARTICLE_HEADERS.division),pin:v9idx_(map,V9_ARTICLE_HEADERS.pin),
+  staff:v9idx_(map,V9_ARTICLE_HEADERS.staff),masterStatus:v9idx_(map,V9_ARTICLE_HEADERS.masterStatus)
+ };
+ const rows=[];
+ for(let r=hr+1;r<v.length;r++){
+  const raw=v[r];if(!raw.some(x=>String(x).trim()))continue;
+  const fields={};headers.forEach((h,i)=>{if(h)fields[h]=String(raw[i]??'').trim()});
+  const key=idx.key>=0?String(raw[idx.key]||'').trim():(idx.pmv>=0?String(raw[idx.pmv]||'').trim():'');
+  rows.push({
+   rowNumber:r+1,articleKey:key,barCodeId:idx.key>=0?String(raw[idx.key]||'').trim():'',
+   pmvApplicationNumber:idx.pmv>=0?String(raw[idx.pmv]||'').trim():'',
+   artisanName:idx.artisan>=0?String(raw[idx.artisan]||'').trim():'',
+   mobileNumber:idx.mobile>=0?String(raw[idx.mobile]||'').trim():'',
+   address:idx.address>=0?String(raw[idx.address]||'').trim():'',
+   circleName:idx.circle>=0?String(raw[idx.circle]||'').trim():'',
+   divisionName:idx.division>=0?String(raw[idx.division]||'').trim():'',
+   pinCode:idx.pin>=0?String(raw[idx.pin]||'').trim():'',
+   deliveryStaff:idx.staff>=0?String(raw[idx.staff]||'').trim():'',
+   masterStatus:idx.masterStatus>=0?String(raw[idx.masterStatus]||'').trim():'',
+   fields
+  });
+ }
+ return {headers,rows,headerRow:hr+1,diagnostics:{
+  sheetName:sh.getName(),totalRows:rows.length,headerRow:hr+1,
+  keyHeader:idx.key>=0?headers[idx.key]:'',pmvHeader:idx.pmv>=0?headers[idx.pmv]:'',
+  artisanHeader:idx.artisan>=0?headers[idx.artisan]:'',pinHeader:idx.pin>=0?headers[idx.pin]:'',
+  masterStatusHeader:idx.masterStatus>=0?headers[idx.masterStatus]:''
+ }};
+}
+function articlePinsForUserV9_(user){
+ const out=[],add=v=>String(v??'').split(/[,;\s|]+/).map(x=>x.trim()).filter(Boolean).forEach(x=>out.push(x));
+ add(user&&user.assignedPins);add(user&&user.pincodes);add(user&&user.pinCodes);
+ return [...new Set(out)];
+}
+function v9all_(r,q){
+ q=String(q||'').trim().toLowerCase();if(!q)return true;
+ const hay=Object.values(r.fields||{}).concat([r.articleKey,r.barCodeId,r.pmvApplicationNumber,r.artisanName,r.mobileNumber,r.address,r.circleName,r.divisionName,r.pinCode,r.deliveryStaff,r.masterStatus]).join(' ').toLowerCase();
+ return q.split(/\s+/).filter(Boolean).every(t=>hay.includes(t));
+}
+function getSpmArticlesV9_(session,date,search,limit){
+ const user=getUser_(session.userId),role=String(user.role||'').toUpperCase();
+ const isAdmin=role===CONFIG.ROLES.ADMIN||role===CONFIG.ROLES.DPS;
+ const pins=articlePinsForUserV9_(user);
+ if(!isAdmin&&!pins.length)return {articles:[],total:0,assignedPins:[],diagnostics:{error:'No PIN codes assigned to this SPM.',userId:user.userId,officeName:user.officeName||''}};
+ const master=readArticleMasterV9_();
+ const pinSet=new Set(pins.map(x=>String(x).trim()));
+ let a=master.rows.filter(r=>isAdmin||pinSet.has(String(r.pinCode).trim()));
+ const matchingBeforeSearch=a.length;
+ if(search)a=a.filter(r=>v9all_(r,search));
+ a=a.slice(0,Number(limit||10000));
+ return {articles:a,total:a.length,totalMasterRows:master.rows.length,assignedPins:pins,diagnostics:{...master.diagnostics,matchingBeforeSearch,search:search||''}};
+}
+function testArticleMasterV9(){
+ const m=readArticleMasterV9_(),target='182143',n=m.rows.filter(r=>String(r.pinCode).trim()===target).length;
+ const result={...m.diagnostics,totalArticles:m.rows.length,targetPin:target,targetPinCount:n,sample:m.rows.slice(0,3)};
+ Logger.log(JSON.stringify(result,null,2));return result;
+}
+/*
+ Add this case to your existing doGet switch:
+ case 'articleMasterDiagnosticV9':
+   return json_({success:true,data:testArticleMasterV9()});
+*/
 /* ---------- users / sessions ---------- */
 function findUser_(userId,mobile){
   const rows=readSheetObjects_(CONFIG.SHEETS.USERS);
