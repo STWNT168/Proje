@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PMV V14 Session Diagnostic</title>
+<style>
+body{font-family:system-ui,sans-serif;padding:20px;line-height:1.45}
+button{padding:10px 14px;margin:4px}
+pre{white-space:pre-wrap;word-break:break-word;background:#f4f4f4;padding:12px;border-radius:8px}
+.ok{color:green}.bad{color:#b00020}
+</style>
+</head>
+<body>
+<h2>PMV Toolkit Tracker — V14 Session Diagnostic</h2>
+<p>This diagnostic does <b>not</b> display session tokens. It shows which storage key V14 would select.</p>
+<button id="run">Run diagnostic</button>
+<pre id="out">Press Run diagnostic.</pre>
+<script>
+const out=document.getElementById('out');
+function parse(v){try{const x=JSON.parse(v);return x&&typeof x==='object'?x:null}catch(e){return null}}
+function inspect(storage){
+ const r=[];
+ for(let i=0;i<storage.length;i++){
+  const k=storage.key(i),x=parse(storage.getItem(k));
+  if(x&&x.token&&x.userId)r.push({
+   key:k,userId:x.userId,role:x.role||'',
+   office:x.officeName||'',
+   createdAt:x.createdAt||x.CREATED_AT||'',
+   lastActive:x.lastActive||x.LAST_ACTIVE||'',
+   tokenPresent:true
+  });
+ }
+ return r;
+}
+document.getElementById('run').onclick=()=>{
+ const primary=inspect(localStorage).concat(inspect(sessionStorage));
+ out.textContent=JSON.stringify({
+  time:new Date().toISOString(),
+  localStorage:inspect(localStorage),
+  sessionStorage:inspect(sessionStorage),
+  primaryKey:'pmv_session_v3',
+  primaryPresent:!!localStorage.getItem('pmv_session_v3')||!!sessionStorage.getItem('pmv_session_v3'),
+  recommendation:'If pmv_session_v3 is present, V14 selects it before all legacy keys.'
+ },null,2);
+};
+</script>
+</body>
+</html>
