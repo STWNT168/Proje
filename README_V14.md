@@ -45,3 +45,14 @@ Diagnostic
 ----------
 ARTICLE_ACCESS_DIAGNOSTIC_V14.html can be opened locally to inspect stored
 session metadata without printing the actual token.
+
+
+V14.1 HOTFIX — PMVApi.todayIndia
+--------------------------------
+The existing spm-dashboard.js calls PMVApi.todayIndia(). V14 did not expose
+that helper, causing: "PMVApi.todayIndia is not a function".
+
+V14.1 adds PMVApi.todayIndia(), returning the current date in Asia/Kolkata
+as YYYY-MM-DD. No Apps Script/API call is needed for this helper.
+
+Replace js/api.js with the V14.1 file. Keep the other V14 files together.
