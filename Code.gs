@@ -897,3 +897,151 @@ function diagnoseV15Article_(key){
     statusRow:v15FindStatusRow_(key,today_()),master:master||null
   };
 }
+/*
+ PMV TOOLKIT TRACKER V16 - SESSION RELIABILITY FIX
+ Add this file to the SAME Google Apps Script project as Code.gs.
+ Name: ZZZ_V16_SessionFix.gs
+
+ Why:
+ - V15 sends a JSON session object, but older deployments may only read one
+   representation of the session.
+ - V16 sends both JSON session + scalar token/userId.
+ - These overrides accept either representation and refresh LAST_ACTIVE.
+ - Daily report/article functions remain unchanged.
+*/
+
+function v16SessionObject_(s){
+  if(!s) return null;
+  if(typeof s==='string'){
+    try{s=JSON.parse(s)}catch(_){return null}
+  }
+  if(s.session) return v16SessionObject_(s.session);
+  if(s.sessionData) return v16SessionObject_(s.sessionData);
+  if(!s.token && s.TOKEN)s.token=s.TOKEN;
+  if(!s.userId && s.USER_ID)s.userId=s.USER_ID;
+  return (s.token&&s.userId)?s:null;
+}
+
+function v16Authenticate_(s){
+  s=v16SessionObject_(s);
+  if(!s||!clean_(s.token)||!clean_(s.userId))
+    throw new Error('Not authenticated. Please sign in again.');
+
+  const sh=getSheet_(CONFIG.SHEETS.SESSIONS);
+  const data=sh.getDataRange().getValues();
+  if(data.length<2)throw new Error('Invalid session. Please sign in again.');
+
+  const h=headerMap_(data[0]);
+  const tokenCol=firstHeader_(h,['TOKEN']);
+  const uidCol=firstHeader_(h,['USER_ID']);
+  const createdCol=firstHeader_(h,['CREATED_AT']);
+  const activeCol=firstHeader_(h,['LAST_ACTIVE']);
+
+  if(tokenCol===-1||uidCol===-1)
+    throw new Error('SESSIONS sheet is missing TOKEN or USER_ID headers.');
+
+  let foundRow=0,foundUid='';
+  for(let i=1;i<data.length;i++){
+    if(clean_(data[i][tokenCol])===clean_(s.token)){
+      foundRow=i+1;
+      foundUid=clean_(data[i][uidCol]);
+      break;
+    }
+  }
+  if(!foundRow)throw new Error('Invalid session. Please sign in again.');
+
+  if(foundUid && upper_(foundUid)!==upper_(s.userId))
+    throw new Error('Invalid session. Please sign in again.');
+
+  if(createdCol!==-1){
+    const created=new Date(data[foundRow-1][createdCol]).getTime();
+    if(!isNaN(created)&&Date.now()-created>CONFIG.SESSION_DAYS*86400000)
+      throw new Error('Session expired. Please sign in again.');
+  }
+
+  const u=findUser_(foundUid||s.userId,'');
+  if(!u||!u.active)throw new Error('Account is inactive.');
+
+  s.userId=u.userId;
+  s.role=u.role;
+  s.officeName=u.officeName;
+  s.officeCode=u.officeCode;
+  s.assignedPins=normalizePins_(u.assignedPins);
+  if(!s.assignedPins.length)s.assignedPins=getEffectivePins_(s);
+
+  if(activeCol!==-1){
+    try{sh.getRange(foundRow,activeCol+1).setValue(new Date())}catch(_){}
+  }
+  return s;
+}
+
+/* Replace the public HTTP handlers so both session formats are accepted. */
+function doGet(e){
+  try{
+    const p=e&&e.parameter?e.parameter:{},a=clean_(p.action);
+    if(!a)return json_({
+      status:'OK',service:'PMV Toolkit Tracker',
+      version:'V16 Session Reliability Fix',date:today_()
+    });
+
+    if(a==='login')return handleLogin_(clean_(p.userId),clean_(p.mobile));
+
+    const supplied=p.session||p.sessionData||{
+      token:clean_(p.token),
+      userId:clean_(p.userId)
+    };
+    const s=v16Authenticate_(supplied);
+
+    switch(a){
+      case 'logout':return json_(logout_(s));
+      case 'getPmvOpeningBalance':return json_(getPmvOpeningBalance_(s,clean_(p.date)||today_()));
+      case 'getOwnPmvDashboard':return json_(getOwnPmvDashboard_(s,clean_(p.date)||today_()));
+      case 'getAdminPmvDashboard':requireAdmin_(s);return json_(getAdminPmvDashboard_(s,clean_(p.date)||today_()));
+      case 'submitPmvReport':return json_(submitPmvReport_(s,JSON.parse(p.record||'{}')));
+      case 'getSpmArticles':return json_(getSpmArticles_(s,clean_(p.date)||today_(),clean_(p.search||p.q),number_(p.limit)||10000));
+      case 'getAdminArticleStatus':return json_(getAdminArticleStatus_(s,clean_(p.date)||today_(),clean_(p.search||p.q),number_(p.limit)||10000));
+      case 'updateArticleStatus':return json_(updateArticleStatus_(s,JSON.parse(p.record||'{}')));
+      case 'pushArticleStatusToMaster':return json_(pushArticleStatusToMaster_(s,JSON.parse(p.record||'{}')));
+      case 'updateArticleMaster':return json_(updateArticleMaster_(s,JSON.parse(p.record||'{}')));
+      case 'diagnoseArticleMaster':return json_(diagnoseArticleMaster_(s));
+      case 'diagnosePinAccess':return json_(diagnosePinAccess_(s));
+      case 'diagnoseArticleStatus':return json_(diagnoseArticleStatus_(s,clean_(p.date)||today_()));
+      default:throw new Error('Unknown action: '+a);
+    }
+  }catch(err){return error_(err.message||err);}
+}
+
+function doPost(e){
+  try{
+    const b=parseBody_(e),a=clean_(b.action);
+    if(a==='login')return handleLogin_(clean_(b.userId),clean_(b.mobile));
+
+    const s=v16Authenticate_(b.session||b.sessionData||{
+      token:clean_(b.token),userId:clean_(b.userId)
+    });
+
+    switch(a){
+      case 'logout':return json_(logout_(s));
+      case 'submitPmvReport':return json_(submitPmvReport_(s,b.record||{}));
+      case 'updateArticleStatus':return json_(updateArticleStatus_(s,b.record||{}));
+      case 'pushArticleStatusToMaster':return json_(pushArticleStatusToMaster_(s,b.record||{}));
+      case 'updateArticleMaster':return json_(updateArticleMaster_(s,b.record||{}));
+      case 'diagnoseArticleMaster':return json_(diagnoseArticleMaster_(s));
+      case 'diagnosePinAccess':return json_(diagnosePinAccess_(s));
+      case 'diagnoseArticleStatus':return json_(diagnoseArticleStatus_(s,clean_(b.date)||today_()));
+      default:throw new Error('Unknown action: '+a);
+    }
+  }catch(err){return error_(err.message||err);}
+}
+
+/* Make requireRole/Admin use the same V16 authentication routine. */
+function requireAdmin_(s){
+  s=v16Authenticate_(s);
+  if(s.role!==CONFIG.ROLES.ADMIN&&s.role!==CONFIG.ROLES.DPS)
+    throw new Error('Administrator/DPS authorisation required.');
+}
+function requireRole_(s,roles){
+  s=v16Authenticate_(s);
+  if(!roles.includes(s.role))
+    throw new Error('You are not authorised for this operation.');
+}
