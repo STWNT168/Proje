@@ -1,21 +1,30 @@
 (() => {
 'use strict';
-const $=id=>document.getElementById(id);
 async function login(){
-  const userId=$('uid').value.trim(), mobile=$('mobile').value.trim(), b=$('login');
-  if(!userId||!mobile)return msg('Enter User ID and registered mobile number.',1);
+  const userId=document.getElementById('uid').value.trim();
+  const mobile=document.getElementById('mobile').value.trim();
+  const b=document.getElementById('login');
+  if(!userId||!mobile){
+    return msg('Enter User ID and registered mobile number.',true);
+  }
   b.disabled=true;b.textContent='VERIFYING…';
   try{
-    const s=await PMVApi.login(userId,mobile);
-    // PMVApi.login already stores the V14 session; this is idempotent.
-    PMVApi.saveSession(s);
+    await PMVApi.login(userId,mobile);
     await App.afterLogin();
   }catch(e){
-    PMVApi.clearSession();
-    msg(e.message,1);
-  }finally{b.disabled=false;b.textContent='SIGN IN'}
+    msg(e.message,true);
+  }finally{
+    b.disabled=false;b.textContent='SIGN IN';
+  }
 }
-function msg(t,b){$('loginMsg').textContent=t;$('loginMsg').className='msg '+(b?'bad':'')}
-async function logout(){try{await PMVApi.logout()}catch(e){}PMVApi.clearSession();location.reload()}
+function msg(t,b){
+  const x=document.getElementById('loginMsg');
+  if(x){x.textContent=t;x.className='msg '+(b?'bad':'')}
+}
+async function logout(){
+  try{await PMVApi.logout()}catch(_){}
+  PMVApi.clearSession();
+  location.reload();
+}
 window.PMVAuth={login,logout};
 })();
