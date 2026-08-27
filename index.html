@@ -8,7 +8,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="description" content="PMV Toolkit daily reporting and article status monitoring">
-<title>PMV Toolkit Tracker</title>
+<title>PMV Toolkit Tracker V16</title>
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="css/article-status-v2.css">
 </head>
@@ -18,7 +18,6 @@
   <div class="user-area"><span id="who"></span><button id="logout" class="btn btn-light">Logout</button></div>
 </header>
 <main class="container">
-
 <section id="loginView" class="login-wrap">
   <div class="login-card">
     <div class="eyebrow">PMV TOOLKIT</div><h1>Daily Reporting Portal</h1>
@@ -28,7 +27,6 @@
     <button id="login" class="btn btn-primary btn-wide">SIGN IN</button><div id="loginMsg" class="notice"></div>
   </div>
 </section>
-
 <section id="spmView" class="hidden">
   <div class="page-head">
     <div><div class="eyebrow">SPM DAILY UPDATE</div><h1>Daily Toolkit Position</h1><p class="muted">Enter today's movement. Article status is limited to the PIN codes assigned to your office.</p></div>
@@ -60,7 +58,6 @@
     </div>
     <div class="validation-card"><strong>Validation</strong><p id="validation">Validation pending.</p></div>
     <button class="btn btn-primary btn-submit" type="submit">SUBMIT DAILY REPORT</button>
-
     <div class="section-card article-card">
       <div class="section-title"><span>3</span> Article-wise Present Status</div>
       <div class="table-note">Every article belonging to your office's assigned PIN codes is loaded. Search works across every displayed/source field.</div>
@@ -83,7 +80,6 @@
     </div>
   </form>
 </section>
-
 <section id="adminView" class="hidden">
   <div class="dashboard-head">
     <div><div class="eyebrow">ADMIN / DPS MONITORING</div><h1>PMV Daily Dashboard</h1><p class="muted">Monitoring date: <b id="monitoring"></b></p></div>
@@ -93,7 +89,6 @@
   <div class="dashboard-section"><div class="section-heading"><h2>Daily Movement Summary</h2><p>Came today, delivered, redirect and RTS — Kits and Articles shown separately.</p></div><div id="stats" class="stats"></div></div>
   <div class="dashboard-section"><div class="section-heading"><h2>SPM-wise Complete Details</h2><p>All submitted and non-updated SPM fields for the selected date.</p></div><div class="table-wrap"><table id="spmWise"></table></div></div>
   <div class="dashboard-section"><div class="section-heading"><h2>Office-wise Consolidated Report</h2><p>Opening → Came Today → Redirect → RTS → Delivered → Closing.</p></div><div class="table-wrap"><table id="office"></table></div></div>
-
   <div class="dashboard-section">
     <div class="section-heading"><h2>Article Status Review & Master Authorisation</h2><p>Present status is read from ARTICLE_STATUS. ADMIN/DPS can review SPM changes and explicitly push selected entries into ARTICLE_MASTER.</p></div>
     <div class="article-tools">
@@ -112,26 +107,26 @@
     <div id="admin-article-status" class="notice"></div>
     <div class="table-wrap"><table id="adminArticles"></table></div>
   </div>
-
   <div class="dashboard-section"><div class="section-heading"><h2>SPMs Who Have Not Updated</h2><p>Active SPMs without a report for the selected date.</p></div><div class="table-wrap"><table id="pending"></table></div></div>
 </section>
 </main>
-<footer>PMV Toolkit Tracker · Udhampur Division · Article Status Control v2</footer>
+<footer>PMV Toolkit Tracker · Udhampur Division · V16 Session Reliability Fix</footer>
 <div id="toast" class="toast"></div>
-<script src="js/config.js"></script>
-<script src="js/api.js"></script>
-<script src="js/auth.js"></script>
-<script src="js/calculations.js"></script>
-<script src="js/validation.js"></script>
-<script src="js/spm-dashboard.js"></script>
-<script src="js/admin-dashboard.js"></script>
-<script src="js/article-dashboard.js"></script>
-<script src="js/app.js"></script>
+<script src="js/config.js?v=16"></script>
+<script src="js/api.js?v=16"></script>
+<script src="js/auth.js?v=16"></script>
+<script src="js/calculations.js?v=16"></script>
+<script src="js/validation.js?v=16"></script>
+<script src="js/spm-dashboard.js?v=16"></script>
+<script src="js/admin-dashboard.js?v=16"></script>
+<script src="js/article-dashboard.js?v=16"></script>
+<script src="js/app.js?v=16"></script>
 <script>
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js?v=4")
-      .then(() => console.log("PMV Toolkit service worker registered"))
+    navigator.serviceWorker.register("./service-worker.js?v=16")
+      .then(reg => reg.update())
+      .then(() => console.log("PMV Toolkit V16 service worker registered"))
       .catch(error => console.error("Service worker registration failed:", error));
   });
 }
