@@ -44,7 +44,14 @@ function bind(){
     const v=PMVValidation.validate();if(!v.valid)return toast(v.message,true);
     const session=PMVApi.ensureSession();
     const record={date:$('spm-date').value,userId:session.userId};
-    ids.forEach(id=>record[map[id]]=n(id));
+    ids.forEach(id=>{
+  const field =
+    id==='invalidKits' ? 'invalidKits' :
+    id==='invalidArticles' ? 'invalidArticles' :
+    map[id];
+
+  record[field]=n(id);
+});;
     const b=e.submitter||$('submit-report');
     if(b){b.disabled=true;b.textContent='SAVING…';}
     try{
